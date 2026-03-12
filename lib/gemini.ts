@@ -1,7 +1,7 @@
 // Gemini API utility — all LLM calls go through here
 // Called server-side only (API routes), never from the browser
 
-const GEMINI_MODEL = 'gemini-2.5-flash-lite-preview-06-17'
+const GEMINI_MODEL = 'gemini-2.5-flash-lite'
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 
 async function callGemini(prompt: string): Promise<string> {
