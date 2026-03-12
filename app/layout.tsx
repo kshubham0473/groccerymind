@@ -26,10 +26,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <AppProvider>
-          <main style={{ paddingBottom: '80px' }}>
-            {children}
-          </main>
-          <BottomNav />
+          <div style={{
+            maxWidth: '430px',
+            margin: '0 auto',
+            minHeight: '100vh',
+            background: 'var(--cream)',
+            position: 'relative',
+            boxShadow: '0 0 60px rgba(0,0,0,0.08)'
+          }}>
+            <main style={{ paddingBottom: '80px' }}>
+              {children}
+            </main>
+            <BottomNav />
+          </div>
         </AppProvider>
       </body>
     </html>

@@ -2,42 +2,70 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createServiceClient()
-
-  // Get all good items with a last_ordered_at date
-  const { data: items } = await supabase
+  const { data, error } = await supabase
     .from('pantry_items')
-    .select('id, name, depletion_days, last_ordered_at, stock_status')
+    .select('*')
     .eq('household_id', user.household_id)
-    .eq('stock_status', 'good')
-    .not('last_ordered_at', 'is', null)
+    .order('name')
 
-  const now = Date.now()
-  const toUpdate: { id: string; stock_status: string }[] = []
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}
 
-  for (const item of items || []) {
-    const daysSince = Math.floor((now - new Date(item.last_ordered_at).getTime()) / 86400000)
-    const pct = daysSince / item.depletion_days
+export async function POST(req: NextRequest) {
+  const user = getSessionFromCookie(req.headers.get('cookie'))
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    if (pct >= 1.0) {
-      toUpdate.push({ id: item.id, stock_status: 'finished' })
-    } else if (pct >= 0.75) {
-      toUpdate.push({ id: item.id, stock_status: 'low' })
-    }
-  }
+  const body = await req.json()
+  const supabase = createServiceClient()
 
-  // Batch update
-  for (const u of toUpdate) {
-    await supabase
-      .from('pantry_items')
-      .update({ stock_status: u.stock_status })
-      .eq('id', u.id)
-      .eq('household_id', user.household_id)
-  }
+  const { data, error } = await supabase
+    .from('pantry_items')
+    .insert({ ...body, household_id: user.household_id })
+    .select()
+    .single()
 
-  return NextResponse.json({ updated: toUpdate.length, items: toUpdate })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}
+
+export async function PATCH(req: NextRequest) {
+  const user = getSessionFromCookie(req.headers.get('cookie'))
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id, ...updates } = await req.json()
+  const supabase = createServiceClient()
+
+  const { data, error } = await supabase
+    .from('pantry_items')
+    .update(updates)
+    .eq('id', id)
+    .eq('household_id', user.household_id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}
+
+export async function DELETE(req: NextRequest) {
+  const user = getSessionFromCookie(req.headers.get('cookie'))
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await req.json()
+  const supabase = createServiceClient()
+
+  const { error } = await supabase
+    .from('pantry_items')
+    .delete()
+    .eq('id', id)
+    .eq('household_id', user.household_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }
