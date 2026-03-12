@@ -10,6 +10,9 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [newItem, setNewItem] = useState('')
   const [adding, setAdding] = useState(false)
+  const [suggestions, setSuggestions] = useState<{ item: string; reason: string }[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true)
+  const [addedSuggestions, setAddedSuggestions] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -17,17 +20,20 @@ export default function OrdersPage() {
       if (Array.isArray(data)) setItems(data)
       setLoading(false)
     })
+    // Load smart suggestions
+    fetch('/api/suggest/orders')
+      .then(r => r.json())
+      .then(data => { setSuggestions(data.suggestions || []); setSuggestionsLoading(false) })
+      .catch(() => setSuggestionsLoading(false))
   }, [])
 
-  // Real-time sync via Supabase
+  // Real-time sync
   useEffect(() => {
     if (!user) return
     const channel = supabase
       .channel('order_items')
       .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'order_items',
+        event: '*', schema: 'public', table: 'order_items',
         filter: `household_id=eq.${user.household_id}`,
       }, payload => {
         if (payload.eventType === 'INSERT') {
@@ -62,6 +68,17 @@ export default function OrdersPage() {
     inputRef.current?.focus()
   }
 
+  async function addSuggestion(item: string) {
+    setAddedSuggestions(prev => new Set([...prev, item]))
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_name: item, source: 'smart' })
+    })
+    const data = await res.json()
+    if (!data.error) setItems(prev => [...prev, data])
+  }
+
   async function toggleCheck(id: string, current: boolean) {
     setItems(prev => prev.map(i => i.id === id ? { ...i, is_checked: !current } : i))
     await fetch('/api/orders', {
@@ -91,6 +108,10 @@ export default function OrdersPage() {
 
   const unchecked = items.filter(i => !i.is_checked)
   const checked = items.filter(i => i.is_checked)
+  const currentItemNames = new Set(items.map(i => i.item_name.toLowerCase()))
+  const visibleSuggestions = suggestions.filter(s => 
+    !currentItemNames.has(s.item.toLowerCase()) && !addedSuggestions.has(s.item)
+  )
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-2xl animate-bounce">🛒</div></div>
 
@@ -113,7 +134,7 @@ export default function OrdersPage() {
         )}
       </div>
 
-      {/* Add item input */}
+      {/* Add item */}
       <form onSubmit={addItem} className="flex gap-2 mb-5">
         <input ref={inputRef} value={newItem} onChange={e => setNewItem(e.target.value)}
           placeholder="Add an item..."
@@ -127,6 +148,41 @@ export default function OrdersPage() {
           Add
         </button>
       </form>
+
+      {/* Smart suggestions */}
+      {(suggestionsLoading || visibleSuggestions.length > 0) && (
+        <div className="kitchen-card p-4 mb-4" style={{ borderLeft: '3px solid var(--green-soft)' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span>✨</span>
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--green-mid)' }}>
+              Smart Suggestions
+            </p>
+          </div>
+          {suggestionsLoading ? (
+            <div className="space-y-2">
+              {[70, 55, 65].map(w => (
+                <div key={w} className="h-3 rounded-full animate-pulse" style={{ background: 'var(--green-light)', width: `${w}%` }} />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {visibleSuggestions.map(s => (
+                <div key={s.item} className="flex items-center justify-between py-1">
+                  <div className="flex-1 min-w-0 pr-3">
+                    <p className="text-sm font-medium">{s.item}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.reason}</p>
+                  </div>
+                  <button onClick={() => addSuggestion(s.item)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-full flex-shrink-0 transition-all active:scale-95"
+                    style={{ background: 'var(--green-light)', color: 'var(--green-deep)' }}>
+                    + Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Items to get */}
       {unchecked.length > 0 && (
@@ -144,7 +200,11 @@ export default function OrdersPage() {
                   <span className="text-sm font-medium block truncate">{item.item_name}</span>
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     added by {item.added_by_username}
-                    {item.source !== 'manual' && <span className="ml-1 capitalize" style={{ color: 'var(--green-soft)' }}>· from {item.source}</span>}
+                    {item.source !== 'manual' && (
+                      <span className="ml-1 capitalize" style={{ color: 'var(--green-soft)' }}>
+                        · {item.source === 'smart' ? '✨ smart' : `from ${item.source}`}
+                      </span>
+                    )}
                   </span>
                 </div>
                 <button onClick={() => removeItem(item.id)}
@@ -156,7 +216,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Checked items */}
+      {/* Checked */}
       {checked.length > 0 && (
         <div className="kitchen-card p-4 mb-4" style={{ opacity: 0.7 }}>
           <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-muted)' }}>
@@ -177,8 +237,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {items.length === 0 && (
+      {items.length === 0 && !suggestionsLoading && (
         <div className="text-center py-16">
           <div className="text-5xl mb-3">🛒</div>
           <p className="font-medium" style={{ color: 'var(--text-secondary)' }}>Your order list is empty</p>
