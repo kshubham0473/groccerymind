@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --green-deep: #1B4332;
+  --green-mid: #2D6A4F;
+  --green-soft: #52B788;
+  --green-light: #D8F3DC;
+  --green-pale: #F0FAF2;
+  --amber: #F4A261;
+  --amber-light: #FFF3E8;
+  --red-soft: #E63946;
+  --cream: #FDFCF7;
+  --warm-white: #F9F8F3;
+  --shelf: #C4A882;
+  --shelf-dark: #8B6F47;
+  --text-primary: #1A1A1A;
+  --text-secondary: #555550;
+  --text-muted: #9B9B8E;
+  --border: #E8E6DC;
+  --shadow: rgba(27, 67, 50, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background: var(--cream);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { font-family: 'Playfair Display', serif; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.kitchen-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px var(--shadow);
+}
+
+.shelf-row {
+  background: linear-gradient(180deg, #D4B896 0%, #C4A882 60%, #B8956E 100%);
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(139, 111, 71, 0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-up { animation: slideUp 0.3s ease forwards; }
+.animate-fade-in { animation: fadeIn 0.2s ease forwards; }
