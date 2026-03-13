@@ -3,15 +3,36 @@ import { useEffect, useState } from 'react'
 import { PantryItem, PantryTier, StockStatus } from '@/types'
 
 const TIERS: { key: PantryTier; label: string; emoji: string }[] = [
-  { key: 'fresh',  label: 'Fresh & Daily',    emoji: '🥬' },
-  { key: 'weekly', label: 'Weekly Supplies',  emoji: '📦' },
-  { key: 'staple', label: 'Monthly Staples',  emoji: '🏪' },
+  { key: 'fresh',  label: 'Fresh & Daily',   emoji: '🥬' },
+  { key: 'weekly', label: 'Weekly Supplies', emoji: '📦' },
+  { key: 'staple', label: 'Monthly Staples', emoji: '🏪' },
 ]
-const STATUS_STYLE: Record<StockStatus, { dot: string; className: string; label: string }> = {
-  good:     { dot: '#22C55E', className: 'badge-good',     label: 'Good'     },
-  low:      { dot: '#D97706', className: 'badge-low',      label: 'Low'      },
-  finished: { dot: '#DC2626', className: 'badge-finished', label: 'Finished' },
+const STATUS_STYLE: Record<StockStatus, { dot: string; cls: string; label: string }> = {
+  good:     { dot: '#22C55E', cls: 'badge-good',     label: 'Good'     },
+  low:      { dot: '#D97706', cls: 'badge-low',      label: 'Low'      },
+  finished: { dot: '#DC2626', cls: 'badge-finished', label: 'Finished' },
 }
+
+// Smart depletion day defaults by category
+const DEPLETION_DEFAULTS: Record<string, { days: number; tier: PantryTier }> = {
+  'Vegetables':    { days: 5,   tier: 'fresh'  },
+  'Leafy Greens':  { days: 3,   tier: 'fresh'  },
+  'Fruits':        { days: 5,   tier: 'fresh'  },
+  'Dairy':         { days: 4,   tier: 'fresh'  },
+  'Eggs':          { days: 10,  tier: 'fresh'  },
+  'Bread':         { days: 4,   tier: 'fresh'  },
+  'Grains & Rice': { days: 30,  tier: 'staple' },
+  'Lentils & Dal': { days: 30,  tier: 'staple' },
+  'Spices':        { days: 60,  tier: 'staple' },
+  'Oil & Ghee':    { days: 30,  tier: 'staple' },
+  'Flour':         { days: 21,  tier: 'weekly' },
+  'Onion & Garlic':{ days: 14,  tier: 'weekly' },
+  'Canned & Dry':  { days: 45,  tier: 'staple' },
+  'Snacks':        { days: 14,  tier: 'weekly' },
+  'Beverages':     { days: 14,  tier: 'weekly' },
+  'Other':         { days: 7,   tier: 'weekly' },
+}
+const CATEGORIES = Object.keys(DEPLETION_DEFAULTS)
 
 export default function PantryPage() {
   const [items, setItems] = useState<PantryItem[]>([])
@@ -20,7 +41,7 @@ export default function PantryPage() {
   const [filterTier, setFilterTier] = useState<'all'|PantryTier>('all')
   const [actionItem, setActionItem] = useState<PantryItem|null>(null)
   const [adding, setAdding] = useState(false)
-  const [newItem, setNewItem] = useState({ name: '', tier: 'fresh' as PantryTier, category: 'Vegetables', depletion_days: 7 })
+  const [newItem, setNewItem] = useState({ name: '', tier: 'fresh' as PantryTier, category: 'Vegetables', depletion_days: 5 })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -30,6 +51,11 @@ export default function PantryPage() {
       setLoading(false)
     })
   }, [])
+
+  function onCategoryChange(cat: string) {
+    const def = DEPLETION_DEFAULTS[cat] || { days: 7, tier: 'weekly' as PantryTier }
+    setNewItem(p => ({ ...p, category: cat, depletion_days: def.days, tier: def.tier }))
+  }
 
   async function updateStatus(id: string, stock_status: StockStatus) {
     const item = items.find(i => i.id === id)
@@ -47,7 +73,9 @@ export default function PantryPage() {
     const res = await fetch('/api/pantry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newItem, name: newItem.name.trim(), stock_status: 'good' }) })
     const d = await res.json()
     if (!d.error) setItems(p => [...p, d])
-    setAdding(false); setNewItem({ name: '', tier: 'fresh', category: 'Vegetables', depletion_days: 7 }); setSaving(false)
+    setAdding(false)
+    setNewItem({ name: '', tier: 'fresh', category: 'Vegetables', depletion_days: 5 })
+    setSaving(false)
   }
 
   async function deleteItem(id: string) {
@@ -69,7 +97,9 @@ export default function PantryPage() {
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Kitchen</p>
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Pantry</h1>
-          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>{items.length} items tracked{alertCount > 0 ? ` · ⚠️ ${alertCount} alert${alertCount > 1 ? 's' : ''}` : ''}</p>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>
+            {items.length} items{alertCount > 0 ? ` · ⚠️ ${alertCount} need attention` : ' · all good'}
+          </p>
         </div>
       </div>
 
@@ -82,7 +112,7 @@ export default function PantryPage() {
         </div>
 
         {/* Tier filter */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 16, paddingBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 16, paddingBottom: 2 }}>
           {([{ key: 'all', label: 'All', emoji: '🏠' }, ...TIERS] as any[]).map(f => (
             <button key={f.key} onClick={() => setFilterTier(f.key)} style={{
               flexShrink: 0, padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
@@ -104,18 +134,18 @@ export default function PantryPage() {
                 <span className="font-display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{tier.label}</span>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>({tierItems.length})</span>
               </div>
-              <div className="card" style={{ padding: '8px 12px 12px' }}>
+              <div className="card" style={{ padding: '10px 12px 14px' }}>
                 {tierItems.length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>Empty</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '10px 0' }}>Empty shelf</p>
                 ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 4 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 10 }}>
                     {tierItems.map(item => {
                       const ss = STATUS_STYLE[item.stock_status]
                       return (
                         <button key={item.id} onClick={() => setActionItem(item)} style={{
                           display: 'inline-flex', alignItems: 'center', gap: 5,
-                          padding: '6px 10px', borderRadius: 10, border: '1px solid',
-                          borderColor: item.stock_status === 'good' ? 'var(--border)' : ss.dot + '44',
+                          padding: '6px 10px', borderRadius: 10,
+                          border: `1px solid ${item.stock_status === 'good' ? 'var(--border)' : ss.dot + '44'}`,
                           background: item.stock_status === 'good' ? 'white' : ss.dot + '15',
                           cursor: 'pointer', fontSize: 13, fontWeight: 500,
                           color: item.stock_status === 'good' ? 'var(--text-primary)' : ss.dot
@@ -127,8 +157,7 @@ export default function PantryPage() {
                     })}
                   </div>
                 )}
-                {/* Shelf plank */}
-                <div style={{ height: 6, background: 'linear-gradient(180deg, #D4B896 0%, #B8956E 100%)', borderRadius: 3, marginTop: 10, boxShadow: '0 2px 4px rgba(139,111,71,0.3)' }} />
+                <div style={{ height: 6, background: 'linear-gradient(180deg, #D4B896 0%, #B8956E 100%)', borderRadius: 3, boxShadow: '0 2px 4px rgba(139,111,71,0.3)' }} />
               </div>
             </div>
           )
@@ -136,26 +165,27 @@ export default function PantryPage() {
 
         <button onClick={() => setAdding(true)} style={{
           width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed var(--green-light)',
-          background: 'none', color: 'var(--green-mid)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 4
+          background: 'none', color: 'var(--green-mid)', fontSize: 13, fontWeight: 600, cursor: 'pointer'
         }}>+ Add item to pantry</button>
       </div>
 
       {/* Action sheet */}
       {actionItem && (
         <div onClick={() => setActionItem(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 32px', border: 'none' }}>
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 20px' }} />
-            <p className="font-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{actionItem.name}</p>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>{actionItem.tier} · refreshes every {actionItem.depletion_days} days</p>
+          <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 36px', border: 'none' }}>
+            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
+            <p className="font-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>{actionItem.name}</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>{actionItem.tier} · {actionItem.category} · refreshes every {actionItem.depletion_days} days</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {(['good','low','finished'] as StockStatus[]).map(status => {
                 const ss = STATUS_STYLE[status]
                 const active = actionItem.stock_status === status
                 return (
                   <button key={status} onClick={() => updateStatus(actionItem.id, status)} style={{
-                    padding: '13px 16px', borderRadius: 14, border: `1px solid ${active ? ss.dot + '44' : 'var(--border)'}`,
-                    background: active ? ss.dot + '15' : 'white', cursor: 'pointer', textAlign: 'left',
-                    display: 'flex', alignItems: 'center', gap: 10
+                    padding: '13px 16px', borderRadius: 14, cursor: 'pointer', textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    border: `1px solid ${active ? ss.dot + '44' : 'var(--border)'}`,
+                    background: active ? ss.dot + '15' : 'white',
                   }}>
                     <span style={{ width: 10, height: 10, borderRadius: '50%', background: ss.dot, flexShrink: 0, display: 'inline-block' }} />
                     <span style={{ fontSize: 14, fontWeight: 600, color: active ? ss.dot : 'var(--text-primary)' }}>
@@ -175,33 +205,51 @@ export default function PantryPage() {
       {/* Add item sheet */}
       {adding && (
         <div onClick={() => setAdding(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 32px', border: 'none' }}>
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 20px' }} />
+          <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 36px', border: 'none' }}>
+            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
             <p className="font-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Add to Pantry</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <input autoFocus value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
-                placeholder="Item name (e.g. Curd)" style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                {TIERS.map(t => (
-                  <button key={t.key} onClick={() => setNewItem(p => ({ ...p, tier: t.key }))} style={{
-                    padding: '9px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                    background: newItem.tier === t.key ? 'var(--green-mid)' : 'white',
-                    color: newItem.tier === t.key ? 'white' : 'var(--text-secondary)',
-                    boxShadow: 'var(--shadow)'
-                  }}>{t.emoji} {t.key.charAt(0).toUpperCase() + t.key.slice(1)}</button>
-                ))}
+                placeholder="Item name (e.g. Curd)"
+                style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+
+              {/* Category selector — drives tier + days automatically */}
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Category</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {CATEGORIES.map(cat => (
+                    <button key={cat} onClick={() => onCategoryChange(cat)} style={{
+                      padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                      fontSize: 12, fontWeight: 600, textAlign: 'left',
+                      background: newItem.category === cat ? 'var(--green-mid)' : 'white',
+                      color: newItem.category === cat ? 'white' : 'var(--text-secondary)',
+                      boxShadow: 'var(--shadow)'
+                    }}>{cat}</button>
+                  ))}
+                </div>
               </div>
-              <input value={newItem.category} onChange={e => setNewItem(p => ({ ...p, category: e.target.value }))}
-                placeholder="Category (e.g. Dairy)" style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Lasts approx.</span>
-                <input type="number" value={newItem.depletion_days} onChange={e => setNewItem(p => ({ ...p, depletion_days: +e.target.value }))}
-                  style={{ width: 64, padding: '9px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', textAlign: 'center', fontFamily: 'inherit' }} />
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>days</span>
+
+              {/* Auto-filled hint */}
+              <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--green-pale)', border: '1px solid var(--green-light)', display: 'flex', gap: 16 }}>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Shelf</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--green-deep)', textTransform: 'capitalize' }}>{newItem.tier}</p>
+                </div>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Lasts approx.</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="number" value={newItem.depletion_days}
+                      onChange={e => setNewItem(p => ({ ...p, depletion_days: +e.target.value }))}
+                      style={{ width: 48, padding: '4px 8px', borderRadius: 8, border: '1px solid var(--green-light)', fontSize: 13, fontWeight: 700, outline: 'none', textAlign: 'center', fontFamily: 'inherit', color: 'var(--green-deep)', background: 'white' }} />
+                    <span style={{ fontSize: 13, color: 'var(--green-deep)', fontWeight: 600 }}>days</span>
+                  </div>
+                </div>
               </div>
+
               <button onClick={addItem} disabled={saving || !newItem.name.trim()} style={{
-                padding: '13px', borderRadius: 12, border: 'none', background: 'var(--green-mid)', color: 'white',
-                fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.7 : 1
+                padding: '13px', borderRadius: 12, border: 'none',
+                background: saving || !newItem.name.trim() ? 'var(--green-soft)' : 'var(--green-mid)',
+                color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer'
               }}>{saving ? 'Adding...' : 'Add to Pantry'}</button>
             </div>
           </div>

@@ -13,6 +13,7 @@ export default function OrdersPage() {
   const [suggestions, setSuggestions] = useState<{ item: string; reason: string }[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(true)
   const [addedSuggestions, setAddedSuggestions] = useState<Set<string>>(new Set())
+  const [markingAll, setMarkingAll] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -68,6 +69,19 @@ export default function OrdersPage() {
     await fetch('/api/orders', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clear_checked: true }) })
   }
 
+  async function markAllOrdered() {
+    const unchecked = items.filter(i => !i.is_checked)
+    if (unchecked.length === 0) return
+    setMarkingAll(true)
+    // Optimistic update
+    setItems(p => p.map(i => ({ ...i, is_checked: true })))
+    // Fire all PATCH calls
+    await Promise.all(unchecked.map(i =>
+      fetch('/api/orders', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: i.id, is_checked: true }) })
+    ))
+    setMarkingAll(false)
+  }
+
   const unchecked = items.filter(i => !i.is_checked)
   const checked = items.filter(i => i.is_checked)
   const currentNames = new Set(items.map(i => i.item_name.toLowerCase()))
@@ -88,20 +102,23 @@ export default function OrdersPage() {
         </div>
         {checked.length > 0 && (
           <button onClick={clearChecked} style={{
-            position: 'absolute', top: 48, right: 20, background: 'rgba(255,255,255,0.15)',
-            border: 'none', color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+            position: 'absolute', top: 48, right: 20,
+            background: 'rgba(255,255,255,0.15)', border: 'none', color: 'rgba(255,255,255,0.8)',
+            padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
           }}>Clear {checked.length} ✓</button>
         )}
       </div>
 
       <div style={{ padding: '16px 16px 24px' }}>
+
         {/* Add input */}
         <form onSubmit={addItem} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <input ref={inputRef} value={newItem} onChange={e => setNewItem(e.target.value)}
             placeholder="Add an item to order..."
             style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'white', fontFamily: 'inherit' }} />
           <button type="submit" disabled={adding || !newItem.trim()} style={{
-            padding: '11px 18px', borderRadius: 12, border: 'none', background: 'var(--green-mid)', color: 'white',
+            padding: '11px 18px', borderRadius: 12, border: 'none',
+            background: 'var(--green-mid)', color: 'white',
             fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !newItem.trim() ? 0.5 : 1
           }}>Add</button>
         </form>
@@ -114,20 +131,21 @@ export default function OrdersPage() {
               <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green-mid)' }}>Smart Suggestions</span>
             </div>
             <div style={{ padding: '8px 14px 12px' }}>
-              {suggestionsLoading ? (
-                [70,50,60].map(w => <div key={w} className="skeleton" style={{ height: 10, width: `${w}%`, marginBottom: 8 }} />)
-              ) : visibleSuggestions.map(s => (
-                <div key={s.item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{s.item}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>{s.reason}</p>
+              {suggestionsLoading
+                ? [70, 50, 60].map(w => <div key={w} className="skeleton" style={{ height: 10, width: `${w}%`, marginBottom: 8 }} />)
+                : visibleSuggestions.map(s => (
+                  <div key={s.item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                      <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{s.item}</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>{s.reason}</p>
+                    </div>
+                    <button onClick={() => addSuggestion(s.item)} style={{
+                      flexShrink: 0, padding: '5px 12px', borderRadius: 99, border: 'none',
+                      background: 'var(--green-light)', color: 'var(--green-deep)', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                    }}>+ Add</button>
                   </div>
-                  <button onClick={() => addSuggestion(s.item)} style={{
-                    flexShrink: 0, padding: '5px 12px', borderRadius: 99, border: 'none',
-                    background: 'var(--green-light)', color: 'var(--green-deep)', fontSize: 12, fontWeight: 700, cursor: 'pointer'
-                  }}>+ Add</button>
-                </div>
-              ))}
+                ))
+              }
             </div>
           </div>
         )}
@@ -136,46 +154,64 @@ export default function OrdersPage() {
         {unchecked.length > 0 && (
           <div className="card" style={{ marginBottom: 12, overflow: 'hidden' }}>
             <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>To get</span>
-              <span className="pill badge-good" style={{ fontSize: 11 }}>{unchecked.length} item{unchecked.length !== 1 ? 's' : ''}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>To get</span>
+                <span className="pill badge-good" style={{ fontSize: 11 }}>{unchecked.length} item{unchecked.length !== 1 ? 's' : ''}</span>
+              </div>
+              <button onClick={markAllOrdered} disabled={markingAll} style={{
+                padding: '5px 12px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                background: 'var(--green-deep)', color: 'white', fontSize: 11, fontWeight: 700,
+                opacity: markingAll ? 0.6 : 1
+              }}>
+                {markingAll ? 'Marking...' : '✓ Mark all ordered'}
+              </button>
             </div>
             <div style={{ padding: '4px 0' }}>
               {unchecked.map(item => (
                 <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
                   <button onClick={() => toggleCheck(item.id, false)} style={{
-                    width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--green-soft)',
+                    width: 22, height: 22, borderRadius: '50%', border: '2px solid var(--green-soft)',
                     background: 'none', cursor: 'pointer', flexShrink: 0
                   }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>{item.item_name}</p>
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
                       {item.added_by_username}
-                      {item.source !== 'manual' && <span style={{ color: 'var(--green-soft)', marginLeft: 4 }}>· {item.source === 'smart' ? '✨ smart' : item.source}</span>}
+                      {item.source !== 'manual' && (
+                        <span style={{ color: 'var(--green-soft)', marginLeft: 4 }}>
+                          · {item.source === 'smart' ? '✨ smart' : item.source === 'discover' ? '🍳 discover' : item.source}
+                        </span>
+                      )}
                     </p>
                   </div>
-                  <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, padding: 0 }}>×</button>
+                  <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Checked */}
+        {/* Checked / ordered */}
         {checked.length > 0 && (
-          <div className="card" style={{ overflow: 'hidden', opacity: 0.6 }}>
-            <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Ordered · {checked.length}</span>
+          <div className="card" style={{ overflow: 'hidden', opacity: 0.55 }}>
+            <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+                Ordered · {checked.length}
+              </span>
+              <button onClick={clearChecked} style={{ background: 'none', border: 'none', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                Clear all
+              </button>
             </div>
             <div style={{ padding: '4px 0' }}>
               {checked.map(item => (
                 <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
                   <button onClick={() => toggleCheck(item.id, true)} style={{
-                    width: 20, height: 20, borderRadius: '50%', background: 'var(--green-soft)', border: 'none',
+                    width: 22, height: 22, borderRadius: '50%', background: 'var(--green-soft)', border: 'none',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                   }}>
-                    <span style={{ color: 'white', fontSize: 11, fontWeight: 700 }}>✓</span>
+                    <span style={{ color: 'white', fontSize: 11, fontWeight: 700, lineHeight: 1 }}>✓</span>
                   </button>
-                  <p style={{ fontSize: 14, color: 'var(--text-muted)', textDecoration: 'line-through', margin: 0 }}>{item.item_name}</p>
+                  <p style={{ fontSize: 14, color: 'var(--text-muted)', textDecoration: 'line-through', margin: 0, flex: 1 }}>{item.item_name}</p>
                 </div>
               ))}
             </div>
@@ -185,7 +221,7 @@ export default function OrdersPage() {
         {items.length === 0 && !suggestionsLoading && (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🛒</div>
-            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>Your basket is empty</p>
+            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>Basket is empty</p>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>Add items above or mark pantry items as finished</p>
           </div>
         )}
