@@ -121,6 +121,11 @@ export default function Dashboard() {
           position: 'absolute', top: 48, right: 20, background: 'rgba(255,255,255,0.15)',
           border: 'none', color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
         }}>Sign out</button>
+        <a href="/settings" style={{
+          position: 'absolute', top: 48, right: 88,
+          background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)',
+          padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, textDecoration: 'none'
+        }}>⚙️</a>
       </div>
 
       <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>

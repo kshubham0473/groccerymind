@@ -1,10 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useApp } from '@/components/AppProvider'
-import { AppProvider } from '@/components/AppProvider'
-import BottomNav from '@/components/BottomNav'
 
-function AdminContent() {
+export default function AdminPage() {
   const { user } = useApp()
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -15,132 +13,135 @@ function AdminContent() {
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
-    fetch('/api/admin/users').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setUsers(data)
+    fetch('/api/admin/users').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setUsers(d)
       setLoading(false)
     })
   }, [])
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault()
-    setSaving(true)
-    setError('')
-    const res = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
-    })
+    setSaving(true); setError('')
+    const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     const data = await res.json()
     if (data.error) { setError(data.error); setSaving(false); return }
-    setUsers(prev => [...prev, data])
-    setAdding(false)
+    setUsers(p => [...p, data]); setAdding(false)
     setForm({ username: '', password: '', role: 'member' })
-    setSuccess('User created successfully!')
-    setTimeout(() => setSuccess(''), 3000)
+    setSuccess('Member added!'); setTimeout(() => setSuccess(''), 3000)
     setSaving(false)
   }
 
   if (!user || user.role !== 'admin') {
-    return <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>Access denied</div>
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+        <p style={{ color: 'var(--text-muted)' }}>Admin access only</p>
+      </div>
+    )
   }
 
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}><span style={{ fontSize: 24 }}>⚙️</span></div>
+
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 animate-slide-up">
-      <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: 'Playfair Display', color: 'var(--green-deep)' }}>Admin</h1>
-      <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Manage household access</p>
-
-      {success && (
-        <div className="mb-4 px-4 py-3 rounded-xl text-sm" style={{ background: 'var(--green-light)', color: 'var(--green-deep)' }}>
-          ✅ {success}
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <div className="page-header">
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Management</p>
+          <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Admin</h1>
         </div>
-      )}
+        <a href="/settings" style={{ position: 'absolute', top: 48, right: 20, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Settings →</a>
+      </div>
 
-      <div className="kitchen-card p-5 mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold" style={{ fontFamily: 'Playfair Display' }}>Household Members</h2>
-          <button onClick={() => setAdding(true)}
-            className="text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
-            style={{ background: 'var(--green-light)', color: 'var(--green-deep)' }}>
-            + New user
-          </button>
-        </div>
-        {loading ? <p style={{ color: 'var(--text-muted)' }} className="text-sm">Loading...</p> : (
-          <div className="space-y-2">
+      <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+        {success && (
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--green-light)', color: 'var(--green-deep)', fontSize: 14, fontWeight: 600 }}>✓ {success}</div>
+        )}
+
+        {/* Members list */}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>
+              Household Members · {users.length}
+            </span>
+          </div>
+          <div style={{ padding: '4px 0' }}>
             {users.map(u => (
-              <div key={u.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl"
-                style={{ background: 'var(--warm-white)' }}>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
-                    style={{ background: 'var(--green-light)', color: 'var(--green-deep)' }}>
-                    {u.username[0].toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{u.username}</p>
-                    <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>{u.role}</p>
-                  </div>
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>@{u.username}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', textTransform: 'capitalize' }}>{u.role}</p>
                 </div>
-                {u.id === user.id && (
-                  <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'var(--green-light)', color: 'var(--green-mid)' }}>you</span>
-                )}
+                <span className={`pill ${u.role === 'admin' ? 'badge-good' : ''}`} style={{ background: u.role === 'admin' ? 'var(--green-light)' : 'var(--cream)', color: u.role === 'admin' ? 'var(--green-deep)' : 'var(--text-muted)', border: '1px solid var(--border)', fontSize: 11 }}>
+                  {u.role}
+                </span>
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Add user form */}
-      {adding && (
-        <div className="kitchen-card p-5">
-          <h3 className="font-semibold mb-4" style={{ fontFamily: 'Playfair Display' }}>Create New User</h3>
-          <form onSubmit={createUser} className="space-y-3">
-            <input required autoFocus value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
-              placeholder="Username"
-              className="w-full px-4 py-3 rounded-xl border text-sm outline-none"
-              style={{ borderColor: 'var(--border)', background: 'var(--warm-white)' }} />
-            <input required type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-              placeholder="Password"
-              className="w-full px-4 py-3 rounded-xl border text-sm outline-none"
-              style={{ borderColor: 'var(--border)', background: 'var(--warm-white)' }} />
-            <div className="flex gap-2">
-              {['member','admin'].map(r => (
-                <button key={r} type="button" onClick={() => setForm(p => ({ ...p, role: r }))}
-                  className="flex-1 py-2.5 rounded-xl border text-sm font-medium transition-all capitalize"
-                  style={{
-                    background: form.role === r ? 'var(--green-mid)' : 'white',
-                    color: form.role === r ? 'white' : 'var(--text-secondary)',
-                    borderColor: form.role === r ? 'var(--green-mid)' : 'var(--border)'
-                  }}>
-                  {r}
-                </button>
-              ))}
-            </div>
-            {error && <p className="text-sm" style={{ color: 'var(--red-soft)' }}>{error}</p>}
-            <div className="flex gap-2">
-              <button type="submit" disabled={saving}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
-                style={{ background: 'var(--green-mid)', color: 'white' }}>
-                {saving ? 'Creating...' : 'Create User'}
-              </button>
-              <button type="button" onClick={() => { setAdding(false); setError('') }}
-                className="px-4 py-3 rounded-xl text-sm border transition-all"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-                Cancel
-              </button>
-            </div>
-          </form>
         </div>
-      )}
-    </div>
-  )
-}
 
-export default function AdminPage() {
-  return (
-    <AppProvider>
-      <div className="min-h-screen pb-20" style={{ background: 'var(--cream)' }}>
-        <AdminContent />
+        {/* Add member */}
+        {!adding ? (
+          <button onClick={() => setAdding(true)} style={{ width: '100%', padding: '13px', borderRadius: 12, border: '1.5px dashed var(--green-light)', background: 'none', color: 'var(--green-mid)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            + Add household member
+          </button>
+        ) : (
+          <div className="card" style={{ padding: 16 }}>
+            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>New Member</p>
+            <form onSubmit={createUser} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input required value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value.toLowerCase() }))}
+                placeholder="Username" style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+              <input required type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                placeholder="Temporary password" style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                {['member','admin'].map(r => (
+                  <button type="button" key={r} onClick={() => setForm(p => ({ ...p, role: r }))} style={{
+                    flex: 1, padding: '9px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                    background: form.role === r ? 'var(--green-mid)' : 'white', color: form.role === r ? 'white' : 'var(--text-secondary)', boxShadow: 'var(--shadow)'
+                  }}>{r.charAt(0).toUpperCase() + r.slice(1)}</button>
+                ))}
+              </div>
+              {error && <p style={{ fontSize: 13, color: 'var(--red)', background: 'var(--red-light)', padding: '8px 12px', borderRadius: 8 }}>{error}</p>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="submit" disabled={saving} style={{ flex: 1, padding: '12px', borderRadius: 12, border: 'none', background: 'var(--green-mid)', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                  {saving ? 'Creating...' : 'Create'}
+                </button>
+                <button type="button" onClick={() => { setAdding(false); setError('') }} style={{ padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)', background: 'white', fontSize: 14, cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Data management */}
+        <div className="card" style={{ padding: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 12 }}>Data Management</p>
+          <a href="/onboarding" style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit'
+          }}>
+            <span style={{ fontSize: 18 }}>🔄</span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Re-run onboarding</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Reset household preferences from scratch</p>
+            </div>
+            <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 18 }}>›</span>
+          </a>
+          <button onClick={async () => {
+            if (!confirm('Clear Smart Pick cache? Next visit will fetch a fresh suggestion.')) return
+            localStorage.removeItem('gm_suggestion')
+            alert('Cache cleared.')
+          }} style={{
+            width: '100%', padding: '12px 0', display: 'flex', alignItems: 'center', gap: 10,
+            background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', marginTop: 4
+          }}>
+            <span style={{ fontSize: 18 }}>🗑️</span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>Clear Smart Pick cache</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Forces a fresh Gemini suggestion today</p>
+            </div>
+          </button>
+        </div>
       </div>
-      <BottomNav />
-    </AppProvider>
+    </div>
   )
 }

@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient()
   const { data, error } = await supabase
     .from('households')
-    .select('preferences')
+    .select('preferences, name')
     .eq('id', user.household_id)
     .single()
 
@@ -24,22 +24,35 @@ export async function PATCH(req: NextRequest) {
   const updates = await req.json()
   const supabase = createServiceClient()
 
-  // Merge with existing preferences
-  const { data: existing } = await supabase
-    .from('households')
-    .select('preferences')
-    .eq('id', user.household_id)
-    .single()
+  // Pull household_name out — it updates the households.name column separately
+  const { household_name, ...prefUpdates } = updates
 
-  const merged = { ...(existing?.preferences || {}), ...updates }
+  if (household_name) {
+    await supabase
+      .from('households')
+      .update({ name: household_name.trim() })
+      .eq('id', user.household_id)
+  }
 
-  const { data, error } = await supabase
-    .from('households')
-    .update({ preferences: merged })
-    .eq('id', user.household_id)
-    .select('preferences')
-    .single()
+  if (Object.keys(prefUpdates).length > 0) {
+    const { data: existing } = await supabase
+      .from('households')
+      .select('preferences')
+      .eq('id', user.household_id)
+      .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data.preferences)
+    const merged = { ...(existing?.preferences || {}), ...prefUpdates }
+
+    const { data, error } = await supabase
+      .from('households')
+      .update({ preferences: merged })
+      .eq('id', user.household_id)
+      .select('preferences')
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data.preferences)
+  }
+
+  return NextResponse.json({ success: true })
 }

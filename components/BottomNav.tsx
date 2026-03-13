@@ -19,7 +19,7 @@ export default function BottomNav() {
     }}>
       <div style={{ display: 'flex', maxWidth: 430, margin: '0 auto' }}>
         {NAV.map(({ href, emoji, label }) => {
-          const active = pathname === href
+          const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
           return (
             <Link key={href} href={href} style={{
               flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
