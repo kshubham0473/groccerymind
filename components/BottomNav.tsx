@@ -13,25 +13,27 @@ const NAV = [
 export default function BottomNav() {
   const pathname = usePathname()
   return (
-    <nav className="bottom-nav fixed bottom-0 left-0 right-0 z-50"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <div className="flex max-w-lg mx-auto">
+    <nav className="bottom-nav" style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+      paddingBottom: 'env(safe-area-inset-bottom)'
+    }}>
+      <div style={{ display: 'flex', maxWidth: 430, margin: '0 auto' }}>
         {NAV.map(({ href, emoji, label }) => {
           const active = pathname === href
           return (
-            <Link key={href} href={href}
-              className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-all relative"
-              style={{ color: active ? 'var(--green-mid)' : 'var(--text-muted)' }}>
+            <Link key={href} href={href} style={{
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '10px 4px 8px', textDecoration: 'none', position: 'relative',
+              color: active ? 'var(--green-mid)' : 'var(--text-muted)'
+            }}>
               {active && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
-                  style={{ background: 'var(--green-mid)' }} />
+                <span style={{
+                  position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+                  width: 24, height: 2, background: 'var(--green-mid)', borderRadius: 99
+                }} />
               )}
-              <span className="text-lg leading-none" style={{
-                filter: active ? 'none' : 'grayscale(0.4)',
-                transform: active ? 'scale(1.15)' : 'scale(1)',
-                transition: 'transform 0.2s cubic-bezier(0.34,1.56,0.64,1)'
-              }}>{emoji}</span>
-              <span className="text-xs font-bold" style={{ fontFamily: 'Nunito', fontSize: '10px' }}>{label}</span>
+              <span style={{ fontSize: 20, lineHeight: 1, marginBottom: 3 }}>{emoji}</span>
+              <span style={{ fontSize: 10, fontWeight: 600 }}>{label}</span>
             </Link>
           )
         })}

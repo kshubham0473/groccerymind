@@ -22,19 +22,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
       </head>
       <body>
         <AppProvider>
-          <div style={{
-            maxWidth: '430px',
-            margin: '0 auto',
-            minHeight: '100vh',
-            background: 'var(--cream)',
-            position: 'relative',
-            boxShadow: '0 0 60px rgba(0,0,0,0.08)'
-          }}>
-            <main style={{ paddingBottom: '80px' }}>
+          <div style={{ maxWidth: '430px', margin: '0 auto', minHeight: '100vh', background: 'var(--cream)' }}>
+            <main style={{ paddingBottom: '72px' }}>
               {children}
             </main>
             <BottomNav />

@@ -16,32 +16,24 @@ export default function OrdersPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    fetch('/api/orders').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setItems(d)
-      setLoading(false)
-    })
-    fetch('/api/suggest/orders')
-      .then(r => r.json())
-      .then(d => { setSuggestions(d.suggestions || []); setSuggestionsLoading(false) })
-      .catch(() => setSuggestionsLoading(false))
+    fetch('/api/orders').then(r => r.json()).then(d => { if (Array.isArray(d)) setItems(d); setLoading(false) })
+    fetch('/api/suggest/orders').then(r => r.json()).then(d => { setSuggestions(d.suggestions || []); setSuggestionsLoading(false) }).catch(() => setSuggestionsLoading(false))
   }, [])
 
   useEffect(() => {
     if (!user) return
-    const channel = supabase.channel('order_items')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `household_id=eq.${user.household_id}` },
-        payload => {
-          if (payload.eventType === 'INSERT') {
-            const r = payload.new as OrderItem
-            setItems(prev => prev.find(i => i.id === r.id) ? prev : [...prev, { ...r, added_by_username: r.added_by === user.id ? user.username : 'partner' }])
-          } else if (payload.eventType === 'UPDATE') {
-            setItems(prev => prev.map(i => i.id === payload.new.id ? { ...i, ...payload.new } : i))
-          } else if (payload.eventType === 'DELETE') {
-            setItems(prev => prev.filter(i => i.id !== payload.old.id))
-          }
-        })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    const ch = supabase.channel('orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `household_id=eq.${user.household_id}` }, payload => {
+        if (payload.eventType === 'INSERT') {
+          const r = payload.new as OrderItem
+          setItems(p => p.find(i => i.id === r.id) ? p : [...p, { ...r, added_by_username: r.added_by === user.id ? user.username : 'partner' }])
+        } else if (payload.eventType === 'UPDATE') {
+          setItems(p => p.map(i => i.id === payload.new.id ? { ...i, ...payload.new } : i))
+        } else if (payload.eventType === 'DELETE') {
+          setItems(p => p.filter(i => i.id !== payload.old.id))
+        }
+      }).subscribe()
+    return () => { supabase.removeChannel(ch) }
   }, [user])
 
   async function addItem(e: React.FormEvent) {
@@ -50,29 +42,29 @@ export default function OrdersPage() {
     setAdding(true)
     const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_name: newItem.trim() }) })
     const d = await res.json()
-    if (!d.error) setItems(prev => [...prev, d])
+    if (!d.error) setItems(p => [...p, d])
     setNewItem(''); setAdding(false); inputRef.current?.focus()
   }
 
   async function addSuggestion(item: string) {
-    setAddedSuggestions(prev => new Set([...prev, item]))
+    setAddedSuggestions(p => new Set([...p, item]))
     const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_name: item, source: 'smart' }) })
     const d = await res.json()
-    if (!d.error) setItems(prev => [...prev, d])
+    if (!d.error) setItems(p => [...p, d])
   }
 
   async function toggleCheck(id: string, current: boolean) {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, is_checked: !current } : i))
+    setItems(p => p.map(i => i.id === id ? { ...i, is_checked: !current } : i))
     await fetch('/api/orders', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, is_checked: !current }) })
   }
 
   async function removeItem(id: string) {
-    setItems(prev => prev.filter(i => i.id !== id))
+    setItems(p => p.filter(i => i.id !== id))
     await fetch('/api/orders', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
   }
 
   async function clearChecked() {
-    setItems(prev => prev.filter(i => !i.is_checked))
+    setItems(p => p.filter(i => !i.is_checked))
     await fetch('/api/orders', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clear_checked: true }) })
   }
 
@@ -81,133 +73,109 @@ export default function OrdersPage() {
   const currentNames = new Set(items.map(i => i.item_name.toLowerCase()))
   const visibleSuggestions = suggestions.filter(s => !currentNames.has(s.item.toLowerCase()) && !addedSuggestions.has(s.item))
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="text-3xl" style={{ animation: 'wiggle 1s ease infinite' }}>🛒</div>
-    </div>
-  )
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}><span style={{ fontSize: 28 }}>🛒</span></div>
 
   return (
-    <div className="max-w-lg mx-auto animate-fade-in">
-      {/* ── Header ── */}
-      <div className="page-header px-5 pt-10 pb-10">
-        <div className="relative z-10 flex items-start justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.55)' }}>Shopping</p>
-            <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'Lora, serif' }}>🛒 Order List</h1>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#86EFAC' }} />
-              <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.65)' }}>Live sync with partner</p>
-            </div>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <div className="page-header">
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Shopping</p>
+          <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Order List</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#86EFAC', display: 'inline-block' }} />
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, margin: 0 }}>Live sync with partner</p>
           </div>
-          {checked.length > 0 && (
-            <button onClick={clearChecked}
-              className="mt-1 text-xs font-bold px-3 py-1.5 rounded-full transition-all"
-              style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)' }}>
-              Clear {checked.length} ✓
-            </button>
-          )}
         </div>
+        {checked.length > 0 && (
+          <button onClick={clearChecked} style={{
+            position: 'absolute', top: 48, right: 20, background: 'rgba(255,255,255,0.15)',
+            border: 'none', color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+          }}>Clear {checked.length} ✓</button>
+        )}
       </div>
 
-      <div className="px-4 -mt-2 pb-8 space-y-4">
-        {/* ── Add input ── */}
-        <form onSubmit={addItem} className="flex gap-2 animate-slide-up stagger-1">
+      <div style={{ padding: '16px 16px 24px' }}>
+        {/* Add input */}
+        <form onSubmit={addItem} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <input ref={inputRef} value={newItem} onChange={e => setNewItem(e.target.value)}
             placeholder="Add an item to order..."
-            className="flex-1 px-4 py-3.5 rounded-2xl border text-sm outline-none transition-all"
-            style={{ borderColor: 'var(--border)', background: 'white', fontFamily: 'Nunito' }}
-            onFocus={e => e.target.style.borderColor = 'var(--green-mid)'}
-            onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-          <button type="submit" disabled={adding || !newItem.trim()}
-            className="px-5 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95"
-            style={{ background: 'var(--green-mid)', color: 'white', opacity: !newItem.trim() ? 0.5 : 1, boxShadow: '0 4px 12px rgba(45,106,79,0.3)' }}>
-            Add
-          </button>
+            style={{ flex: 1, padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'white', fontFamily: 'inherit' }} />
+          <button type="submit" disabled={adding || !newItem.trim()} style={{
+            padding: '11px 18px', borderRadius: 12, border: 'none', background: 'var(--green-mid)', color: 'white',
+            fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !newItem.trim() ? 0.5 : 1
+          }}>Add</button>
         </form>
 
-        {/* ── Smart suggestions ── */}
+        {/* Smart suggestions */}
         {(suggestionsLoading || visibleSuggestions.length > 0) && (
-          <div className="kitchen-card-warm overflow-hidden animate-slide-up stagger-2" style={{ borderLeft: '3px solid var(--green-soft)' }}>
-            <div className="px-4 pt-4 pb-2 flex items-center gap-2">
-              <span>✨</span>
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--green-mid)' }}>Smart Suggestions</p>
+          <div className="card" style={{ marginBottom: 12, overflow: 'hidden', borderLeft: '3px solid var(--green-soft)' }}>
+            <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 13 }}>✨</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green-mid)' }}>Smart Suggestions</span>
             </div>
-            <div className="px-4 pb-4 space-y-2">
+            <div style={{ padding: '8px 14px 12px' }}>
               {suggestionsLoading ? (
-                [75,55,65].map(w => <div key={w} className={`shimmer h-3`} style={{ width: `${w}%` }} />)
+                [70,50,60].map(w => <div key={w} className="skeleton" style={{ height: 10, width: `${w}%`, marginBottom: 8 }} />)
               ) : visibleSuggestions.map(s => (
-                <div key={s.item} className="basket-item p-3 flex items-center justify-between">
-                  <div className="flex-1 min-w-0 pr-3">
-                    <p className="text-sm font-bold">{s.item}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{s.reason}</p>
+                <div key={s.item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{s.item}</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>{s.reason}</p>
                   </div>
-                  <button onClick={() => addSuggestion(s.item)}
-                    className="pill transition-all active:scale-95 flex-shrink-0"
-                    style={{ background: 'var(--green-light)', color: 'var(--green-deep)' }}>
-                    + Add
-                  </button>
+                  <button onClick={() => addSuggestion(s.item)} style={{
+                    flexShrink: 0, padding: '5px 12px', borderRadius: 99, border: 'none',
+                    background: 'var(--green-light)', color: 'var(--green-deep)', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}>+ Add</button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ── To get ── */}
+        {/* To get */}
         {unchecked.length > 0 && (
-          <div className="kitchen-card animate-slide-up stagger-3">
-            <div className="px-5 py-3.5 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-                To get
-              </p>
-              <span className="pill text-xs" style={{ background: 'var(--green-light)', color: 'var(--green-deep)' }}>
-                {unchecked.length} item{unchecked.length !== 1 ? 's' : ''}
-              </span>
+          <div className="card" style={{ marginBottom: 12, overflow: 'hidden' }}>
+            <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>To get</span>
+              <span className="pill badge-good" style={{ fontSize: 11 }}>{unchecked.length} item{unchecked.length !== 1 ? 's' : ''}</span>
             </div>
-            <div className="p-3 space-y-1">
+            <div style={{ padding: '4px 0' }}>
               {unchecked.map(item => (
-                <div key={item.id}
-                  className="basket-item group flex items-center gap-3 p-3">
-                  <button onClick={() => toggleCheck(item.id, false)}
-                    className="w-5 h-5 rounded-full border-2 flex-shrink-0 transition-all"
-                    style={{ borderColor: 'var(--green-soft)' }} />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-semibold block truncate">{item.item_name}</span>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+                  <button onClick={() => toggleCheck(item.id, false)} style={{
+                    width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--green-soft)',
+                    background: 'none', cursor: 'pointer', flexShrink: 0
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>{item.item_name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
                       {item.added_by_username}
-                      {item.source !== 'manual' && (
-                        <span className="ml-1" style={{ color: 'var(--green-soft)' }}>
-                          · {item.source === 'smart' ? '✨ smart' : `from ${item.source}`}
-                        </span>
-                      )}
-                    </span>
+                      {item.source !== 'manual' && <span style={{ color: 'var(--green-soft)', marginLeft: 4 }}>· {item.source === 'smart' ? '✨ smart' : item.source}</span>}
+                    </p>
                   </div>
-                  <button onClick={() => removeItem(item.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg transition-all"
-                    style={{ color: 'var(--text-muted)' }}>✕</button>
+                  <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, padding: 0 }}>×</button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ── Checked off ── */}
+        {/* Checked */}
         {checked.length > 0 && (
-          <div className="kitchen-card animate-slide-up stagger-4" style={{ opacity: 0.65 }}>
-            <div className="px-5 py-3.5 border-b" style={{ borderColor: 'var(--border)' }}>
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-                Ordered · {checked.length}
-              </p>
+          <div className="card" style={{ overflow: 'hidden', opacity: 0.6 }}>
+            <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Ordered · {checked.length}</span>
             </div>
-            <div className="p-3 space-y-1">
+            <div style={{ padding: '4px 0' }}>
               {checked.map(item => (
-                <div key={item.id} className="flex items-center gap-3 p-3">
-                  <button onClick={() => toggleCheck(item.id, true)}
-                    className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'var(--green-soft)' }}>
-                    <span className="text-white text-xs font-bold">✓</span>
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+                  <button onClick={() => toggleCheck(item.id, true)} style={{
+                    width: 20, height: 20, borderRadius: '50%', background: 'var(--green-soft)', border: 'none',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                  }}>
+                    <span style={{ color: 'white', fontSize: 11, fontWeight: 700 }}>✓</span>
                   </button>
-                  <span className="text-sm line-through flex-1" style={{ color: 'var(--text-muted)' }}>{item.item_name}</span>
+                  <p style={{ fontSize: 14, color: 'var(--text-muted)', textDecoration: 'line-through', margin: 0 }}>{item.item_name}</p>
                 </div>
               ))}
             </div>
@@ -215,10 +183,10 @@ export default function OrdersPage() {
         )}
 
         {items.length === 0 && !suggestionsLoading && (
-          <div className="text-center py-16 animate-fade-in">
-            <div className="text-5xl mb-4">🛒</div>
-            <p className="font-bold" style={{ fontFamily: 'Lora, serif', color: 'var(--text-secondary)' }}>Your basket is empty</p>
-            <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Add items above or mark pantry items as finished</p>
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🛒</div>
+            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>Your basket is empty</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>Add items above or mark pantry items as finished</p>
           </div>
         )}
       </div>

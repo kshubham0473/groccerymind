@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Nunito:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -7,263 +7,103 @@
   --green-soft: #52B788;
   --green-light: #D8F3DC;
   --green-pale: #F0FAF2;
-  --amber: #E76F51;
-  --amber-warm: #F4A261;
-  --amber-light: #FFF0E8;
-  --red-soft: #E63946;
-  --cream: #FDFAF4;
-  --warm-white: #F8F5EE;
-  --paper: #FFF9F0;
-  --shelf-light: #E8D5B7;
-  --shelf-mid: #C4A882;
-  --shelf-dark: #8B6F47;
-  --chalk: #F5F0E8;
-  --chalkboard: #2C3E35;
-  --text-primary: #1C1917;
-  --text-secondary: #57534E;
-  --text-muted: #A8A29E;
-  --border: #E7E3DA;
-  --border-warm: #D6CFC4;
-  --shadow-sm: 0 1px 3px rgba(28,25,23,0.06), 0 1px 2px rgba(28,25,23,0.04);
-  --shadow-md: 0 4px 16px rgba(28,25,23,0.08), 0 2px 4px rgba(28,25,23,0.04);
-  --shadow-lg: 0 12px 32px rgba(28,25,23,0.12), 0 4px 8px rgba(28,25,23,0.06);
+  --amber: #D97706;
+  --amber-light: #FEF3C7;
+  --red: #DC2626;
+  --red-light: #FEE2E2;
+  --cream: #FAFAF8;
+  --white: #FFFFFF;
+  --text-primary: #111827;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --border: #E5E7EB;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-html { scroll-behavior: smooth; }
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
 
 body {
   background: var(--cream);
   color: var(--text-primary);
-  font-family: 'Nunito', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-h1, h2, h3, h4 {
-  font-family: 'Lora', serif;
-  line-height: 1.25;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 3px; height: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-warm); border-radius: 99px; }
-
-/* ── Kitchen Card ── */
-.kitchen-card {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  box-shadow: var(--shadow-md);
-}
-
-.kitchen-card-warm {
-  background: var(--paper);
-  border: 1px solid var(--border-warm);
-  border-radius: 20px;
-  box-shadow: var(--shadow-sm);
-}
-
-/* ── Wooden shelf plank ── */
-.shelf-plank {
-  height: 10px;
-  background: linear-gradient(180deg,
-    #E8D5B7 0%,
-    #C4A882 30%,
-    #B8956E 70%,
-    #9E7B54 100%
-  );
-  border-radius: 3px;
-  box-shadow:
-    0 3px 8px rgba(139,111,71,0.35),
-    0 1px 0 rgba(255,255,255,0.25) inset,
-    0 -1px 0 rgba(0,0,0,0.1) inset;
-  position: relative;
-}
-.shelf-plank::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 40px,
-    rgba(139,111,71,0.08) 40px,
-    rgba(139,111,71,0.08) 41px
-  );
-  border-radius: 3px;
-}
-
-/* ── Chalkboard ── */
-.chalkboard {
-  background: var(--chalkboard);
-  border-radius: 16px;
-  position: relative;
-  overflow: hidden;
-}
-.chalkboard::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(255,255,255,0.015) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 50%, rgba(255,255,255,0.01) 0%, transparent 60%);
-}
-.chalkboard-text {
-  font-family: 'Lora', serif;
-  color: rgba(255,255,255,0.88);
-  text-shadow: 0 0 8px rgba(255,255,255,0.15);
-}
-
-/* ── Corkboard ── */
-.corkboard {
-  background:
-    radial-gradient(circle at 25% 25%, rgba(196,168,130,0.4) 0%, transparent 50%),
-    radial-gradient(circle at 75% 75%, rgba(168,138,100,0.3) 0%, transparent 50%),
-    #C9A97A;
-  border-radius: 16px;
-}
-
-/* ── Pin card (for recipe cards on corkboard) ── */
-.pin-card {
-  background: var(--paper);
-  border-radius: 4px;
-  box-shadow:
-    0 2px 8px rgba(0,0,0,0.15),
-    0 1px 2px rgba(0,0,0,0.1),
-    inset 0 1px 0 rgba(255,255,255,0.8);
-  position: relative;
-  transform-origin: center top;
-}
-.pin-card::before {
-  content: '📌';
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14px;
-  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2));
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ── Basket item ── */
-.basket-item {
-  background: white;
+.font-display { font-family: 'Lora', Georgia, serif; }
+
+/* Cards */
+.card {
+  background: var(--white);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: all 0.2s ease;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
 }
-.basket-item:active { transform: scale(0.98); }
 
-/* ── Status indicators ── */
-.status-good  { background: #D1FAE5; color: #065F46; }
-.status-low   { background: #FEF3C7; color: #92400E; }
-.status-finished { background: #FEE2E2; color: #991B1B; }
-
-/* ── Page header with texture ── */
+/* Page header */
 .page-header {
-  background: linear-gradient(135deg, var(--green-deep) 0%, var(--green-mid) 100%);
+  background: linear-gradient(160deg, var(--green-deep) 0%, var(--green-mid) 100%);
+  padding: 48px 20px 32px;
   position: relative;
-  overflow: hidden;
-}
-.page-header::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(circle at 10% 20%, rgba(255,255,255,0.05) 0%, transparent 40%),
-    radial-gradient(circle at 90% 80%, rgba(255,255,255,0.03) 0%, transparent 40%);
 }
 .page-header::after {
   content: '';
   position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 24px;
+  bottom: -1px; left: 0; right: 0;
+  height: 20px;
   background: var(--cream);
-  border-radius: 24px 24px 0 0;
+  border-radius: 20px 20px 0 0;
 }
 
-/* ── Recipe index card ── */
-.recipe-card {
-  background: var(--paper);
-  border: 1px solid var(--border-warm);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
-  border-left: 3px solid var(--green-soft);
-  transition: all 0.2s ease;
-}
-.recipe-card:active { transform: scale(0.97); }
-
-/* ── Bottom nav ── */
+/* Bottom nav */
 .bottom-nav {
-  background: rgba(255,255,255,0.95);
-  backdrop-filter: blur(12px);
+  background: rgba(255,255,255,0.97);
+  backdrop-filter: blur(10px);
   border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 20px rgba(28,25,23,0.06);
 }
 
-/* ── Pill tag ── */
+/* Pill */
 .pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 3px 10px;
   border-radius: 99px;
   font-size: 12px;
   font-weight: 600;
-  font-family: 'Nunito', sans-serif;
+  white-space: nowrap;
 }
 
-/* ── Smart suggestion shimmer ── */
+/* Status badges */
+.badge-good     { background: var(--green-light); color: var(--green-deep); }
+.badge-low      { background: var(--amber-light); color: var(--amber); }
+.badge-finished { background: var(--red-light);   color: var(--red); }
+
+/* Shimmer skeleton */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
 }
-.shimmer {
-  background: linear-gradient(90deg, var(--border) 25%, var(--warm-white) 50%, var(--border) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 8px;
+.skeleton {
+  background: linear-gradient(90deg, #F0F0EE 25%, #F8F8F6 50%, #F0F0EE 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 6px;
 }
 
-/* ── Animations ── */
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes popIn {
-  0%   { opacity: 0; transform: scale(0.92); }
-  70%  { transform: scale(1.02); }
-  100% { opacity: 1; transform: scale(1); }
-}
-@keyframes tiltIn {
-  from { opacity: 0; transform: rotate(-2deg) translateY(8px); }
-  to   { opacity: 1; transform: rotate(0deg) translateY(0); }
-}
-@keyframes wiggle {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-2deg); }
-  75% { transform: rotate(2deg); }
-}
+.fade-up { animation: fadeUp 0.3s ease forwards; }
+.delay-1 { animation-delay: 0.05s; opacity: 0; }
+.delay-2 { animation-delay: 0.10s; opacity: 0; }
+.delay-3 { animation-delay: 0.15s; opacity: 0; }
+.delay-4 { animation-delay: 0.20s; opacity: 0; }
 
-.animate-slide-up   { animation: slideUp 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
-.animate-slide-down { animation: slideDown 0.25s ease forwards; }
-.animate-fade-in    { animation: fadeIn 0.25s ease forwards; }
-.animate-pop-in     { animation: popIn 0.4s cubic-bezier(0.16,1,0.3,1) forwards; }
-.animate-tilt-in    { animation: tiltIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
-
-.stagger-1 { animation-delay: 0.05s; opacity: 0; }
-.stagger-2 { animation-delay: 0.10s; opacity: 0; }
-.stagger-3 { animation-delay: 0.15s; opacity: 0; }
-.stagger-4 { animation-delay: 0.20s; opacity: 0; }
-.stagger-5 { animation-delay: 0.25s; opacity: 0; }
+/* Scrollbar */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
