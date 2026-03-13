@@ -86,6 +86,16 @@ export default function PantryPage() {
     setSaving(false)
   }
 
+  async function markRestocked(id: string) {
+    const res = await fetch('/api/pantry/estimate', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    })
+    const d = await res.json()
+    if (!d.error) setItems(p => p.map(i => i.id === id ? { ...i, ...d } : i))
+    setActionItem(null)
+  }
+
   async function deleteItem(id: string) {
     setItems(p => p.filter(i => i.id !== id)); setActionItem(null)
     await fetch('/api/pantry', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
@@ -209,6 +219,13 @@ export default function PantryPage() {
                   </button>
                 )
               })}
+              <button onClick={() => markRestocked(actionItem.id)} style={{ padding: '13px 16px', borderRadius: 14, border: '1px solid var(--green-light)', background: 'var(--green-pale)', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--green-deep)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>🔄 Just restocked</span>
+                {actionItem.avg_depletion_days && actionItem.order_count && actionItem.order_count >= 3
+                  ? <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--green-mid)' }}>· learned avg {actionItem.avg_depletion_days}d</span>
+                  : <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>· resets depletion clock</span>
+                }
+              </button>
               <button onClick={() => deleteItem(actionItem.id)} style={{ padding: '13px 16px', borderRadius: 14, border: '1px solid var(--red-light)', background: 'var(--red-light)', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--red)' }}>
                 🗑️ Remove from pantry
               </button>

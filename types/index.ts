@@ -9,6 +9,15 @@ export interface Household {
   id: string
   name: string
   member_count: number
+  preferences?: HouseholdPreferences
+}
+
+export interface HouseholdPreferences {
+  dislikes?: string
+  cuisine_prefs?: string[]
+  dietary?: string
+  quickcommerce?: ('blinkit' | 'zepto' | 'swiggy' | 'bigbasket')[]
+  member_names?: Record<string, string>
 }
 
 export interface Dish {
@@ -29,6 +38,18 @@ export interface MealSlot {
   dish?: Dish
 }
 
+export interface DailyLock {
+  id: string
+  household_id: string
+  lock_date: string        // YYYY-MM-DD
+  slot: 'lunch' | 'dinner'
+  dish_id: string | null
+  dish_name: string
+  locked_by: string
+  locked_by_username: string
+  created_at: string
+}
+
 export type PantryTier = 'fresh' | 'weekly' | 'staple'
 export type StockStatus = 'good' | 'low' | 'finished'
 
@@ -40,6 +61,8 @@ export interface PantryItem {
   tier: PantryTier
   stock_status: StockStatus
   depletion_days: number
+  avg_depletion_days?: number | null
+  order_count?: number
   last_ordered_at?: string
   created_at: string
 }
@@ -53,6 +76,16 @@ export interface OrderItem {
   is_checked: boolean
   source: 'manual' | 'pantry' | 'meal_plan' | 'smart' | 'discover'
   created_at: string
+}
+
+export interface DishFeedback {
+  id: string
+  household_id: string
+  user_id: string
+  dish_id?: string | null
+  dish_name?: string | null
+  signal: 'like' | 'dislike'
+  reason?: string | null
 }
 
 export interface AuthSession {
