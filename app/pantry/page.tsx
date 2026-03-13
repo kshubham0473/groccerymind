@@ -37,6 +37,7 @@ const CATEGORIES = Object.keys(DEPLETION_DEFAULTS)
 export default function PantryPage() {
   const [items, setItems] = useState<PantryItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string|null>(null)
   const [search, setSearch] = useState('')
   const [filterTier, setFilterTier] = useState<'all'|PantryTier>('all')
   const [actionItem, setActionItem] = useState<PantryItem|null>(null)
@@ -47,7 +48,14 @@ export default function PantryPage() {
   useEffect(() => {
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
     fetch('/api/pantry').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setItems(d)
+      if (Array.isArray(d)) {
+        setItems(d)
+      } else {
+        setFetchError(d.error || 'Failed to load pantry')
+      }
+      setLoading(false)
+    }).catch(e => {
+      setFetchError(e.message || 'Network error')
       setLoading(false)
     })
   }, [])
@@ -90,6 +98,13 @@ export default function PantryPage() {
   const alertCount = items.filter(i => i.stock_status !== 'good').length
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}><span style={{ fontSize: 28 }}>🥬</span></div>
+  if (fetchError) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', padding: 24, textAlign: 'center' }}>
+      <span style={{ fontSize: 32, marginBottom: 12 }}>⚠️</span>
+      <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Pantry failed to load</p>
+      <p style={{ fontSize: 13, color: 'var(--red)', background: 'var(--red-light)', padding: '8px 14px', borderRadius: 10, fontFamily: 'monospace' }}>{fetchError}</p>
+    </div>
+  )
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
