@@ -51,7 +51,7 @@ export interface OrderItem {
   added_by: string
   added_by_username?: string
   is_checked: boolean
-  source: 'manual' | 'pantry' | 'meal_plan' | 'smart'
+  source: 'manual' | 'pantry' | 'meal_plan' | 'smart' | 'discover'
   created_at: string
 }
 
