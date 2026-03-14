@@ -113,7 +113,7 @@ export default function MealPlanPage() {
         </div>
       </div>
 
-      <div style={{ padding: '0 16px 24px' }}>
+      <div className="page-body" style={{ paddingTop: 0 }}>
         {/* Day selector */}
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '16px 0', marginBottom: 4 }}>
           {DAYS.map(day => {

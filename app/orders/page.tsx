@@ -186,7 +186,7 @@ export default function OrdersPage() {
         )}
       </div>
 
-      <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* ── Add item + frequent chips ── */}
         <div className="card" style={{ padding: 14 }}>

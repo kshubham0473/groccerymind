@@ -113,3 +113,11 @@ body {
   position: relative;
   z-index: 2;
 }
+
+/* ── Page body scroll container ─────────────────────────────────────
+   Ensures content is never hidden behind the bottom nav bar.
+   Use on every page's main scroll div. */
+.page-body {
+  padding: 16px 16px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}

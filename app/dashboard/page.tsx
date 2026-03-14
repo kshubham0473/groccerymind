@@ -145,20 +145,16 @@ export default function Dashboard() {
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>{greeting}</h1>
           <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>{household?.name}</p>
         </div>
+        <a href="/settings" style={{
+          position: 'absolute', top: 16, right: 20, zIndex: 2,
+          width: 36, height: 36, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          textDecoration: 'none', fontSize: 18, lineHeight: 1
+        }}>⚙️</a>
       </div>
 
-      <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-        {/* ── Settings shortcut ── */}
-        <a href="/settings" style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px',
-          borderRadius: 14, border: '1px solid var(--border)', background: 'white',
-          textDecoration: 'none', color: 'inherit'
-        }}>
-          <span style={{ fontSize: 18 }}>⚙️</span>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', flex: 1 }}>Settings & preferences</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>›</span>
-        </a>
+      <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* ── Mood nudge (4x daily, dismissible) ── */}
         {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
@@ -288,12 +284,6 @@ export default function Dashboard() {
           🍳 Cooking something not on the plan?
         </button>
 
-        {user.role === 'admin' && (
-          <a href="/admin" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)', background: 'white', textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 13 }}>
-            <span>⚙️</span><span style={{ fontWeight: 600 }}>Admin panel</span>
-            <span style={{ marginLeft: 'auto', fontSize: 16 }}>›</span>
-          </a>
-        )}
       </div>
 
       {/* Cook anything sheet */}

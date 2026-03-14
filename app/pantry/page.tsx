@@ -128,7 +128,7 @@ export default function PantryPage() {
         </div>
       </div>
 
-      <div style={{ padding: '16px 16px 24px' }}>
+      <div className="page-body">
         {/* Search */}
         <div style={{ position: 'relative', marginBottom: 12 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pantry..."

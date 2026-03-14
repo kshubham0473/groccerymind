@@ -51,7 +51,7 @@ export default function AdminPage() {
         <a href="/settings" style={{ position: 'absolute', top: 48, right: 20, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Settings →</a>
       </div>
 
-      <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {success && (
           <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--green-light)', color: 'var(--green-deep)', fontSize: 14, fontWeight: 600 }}>✓ {success}</div>

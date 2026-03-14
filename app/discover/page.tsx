@@ -136,7 +136,7 @@ function DiscoverContent() {
         </div>
       </div>
 
-      <div style={{ padding: '16px 16px 24px' }}>
+      <div className="page-body">
 
         {/* ── Chatbox ── */}
         <div className="card" style={{ padding: 14, marginBottom: 14 }}>
