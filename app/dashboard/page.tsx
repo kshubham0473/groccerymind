@@ -137,16 +137,6 @@ export default function Dashboard() {
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>{greeting}</h1>
           <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>{household?.name}</p>
         </div>
-        <button onClick={logout} style={{
-          position: 'absolute', top: 48, right: 20, zIndex: 2,
-          background: 'rgba(255,255,255,0.15)', border: 'none', color: 'rgba(255,255,255,0.8)',
-          padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
-        }}>Sign out</button>
-        <a href="/settings" style={{
-          position: 'absolute', top: 48, right: 98, zIndex: 2,
-          background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)',
-          padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, textDecoration: 'none'
-        }}>⚙️</a>
       </div>
 
       <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>

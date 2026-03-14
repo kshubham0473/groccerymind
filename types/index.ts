@@ -88,6 +88,7 @@ export interface OrderItem {
   added_by_username?: string
   is_checked: boolean
   source: 'manual' | 'pantry' | 'meal_plan' | 'smart' | 'discover'
+  status?: 'pending' | 'maybe' | 'ordered'
   created_at: string
 }
 
