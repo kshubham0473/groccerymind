@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/components/AppProvider'
 
@@ -162,6 +162,8 @@ export default function OnboardingPage() {
   const [selectedDishes, setSelectedDishes] = useState<Set<string>>(new Set())
   const [dishDays, setDishDays] = useState<Record<string, string[]>>({})
   const [regeneratingDish, setRegeneratingDish] = useState<string | null>(null)
+  // Tracks ALL dish names ever shown (including replaced ones) to prevent re-suggestions
+  const seenDishNames = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (household) setHouseholdName(household.name)
@@ -190,6 +192,8 @@ export default function OnboardingPage() {
       if (d.dishes?.length) {
         setStarterDishes(d.dishes)
         setSelectedDishes(new Set(d.dishes.map((x: any) => x.name)))
+        // Seed the seen names set
+        d.dishes.forEach((x: any) => seenDishNames.current.add(x.name))
       } else {
         setStarterError('Could not generate suggestions. Try again or skip.')
       }
@@ -203,13 +207,16 @@ export default function OnboardingPage() {
 
   async function regenerateDish(oldName: string) {
     setRegeneratingDish(oldName)
-    const allNames = starterDishes.map(d => d.name)
+    // Use the full accumulated seen set so we never re-suggest a previously shown dish
+    const excludeNames = [...seenDishNames.current]
     const res = await fetch('/api/onboarding/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ exclude_names: allNames })
+      body: JSON.stringify({ exclude_names: excludeNames })
     })
     const d = await res.json()
     if (d.dish) {
+      // Add new name to seen set immediately
+      seenDishNames.current.add(d.dish.name)
       setStarterDishes(p => p.map(dish => dish.name === oldName ? d.dish : dish))
       setSelectedDishes(p => {
         const n = new Set(p)

@@ -9,18 +9,27 @@ const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','satur
 function getTodayKey() { return DAYS[new Date().getDay()] }
 function getTodayISO() { return new Date().toISOString().split('T')[0] }
 
-// ── Mood nudge cache — one per day, dismissible ──────────────────────
+// ── Mood nudge cache — 4 slots per day ───────────────────────────────
+function getTimeSlot(hour: number): string {
+  if (hour >= 6 && hour < 12) return 'morning'
+  if (hour >= 12 && hour < 15) return 'midday'
+  if (hour >= 15 && hour < 19) return 'afternoon'
+  return 'evening'
+}
+function nudgeCacheKey() {
+  const h = new Date().getHours()
+  return `gm_mood_${new Date().toDateString()}_${getTimeSlot(h)}`
+}
 function getMoodNudgeCache() {
   try {
-    const raw = localStorage.getItem('gm_mood_nudge')
+    const raw = localStorage.getItem(nudgeCacheKey())
     if (!raw) return null
-    const { date, data, dismissed } = JSON.parse(raw)
-    if (date !== new Date().toDateString()) return null
+    const { data, dismissed } = JSON.parse(raw)
     return { data, dismissed }
   } catch { return null }
 }
 function setMoodNudgeCache(data: any, dismissed = false) {
-  try { localStorage.setItem('gm_mood_nudge', JSON.stringify({ date: new Date().toDateString(), data, dismissed })) } catch {}
+  try { localStorage.setItem(nudgeCacheKey(), JSON.stringify({ data, dismissed })) } catch {}
 }
 
 const QC_APPS: Record<string, { name: string; emoji: string; url: string }> = {
@@ -49,7 +58,6 @@ export default function Dashboard() {
 
   const today = getTodayKey()
   const hour = new Date().getHours()
-  const isMorning = hour >= 6 && hour < 12
 
   const displayName = prefs.member_names?.[user?.username || ''] || user?.username || ''
   const greeting = hour < 12 ? `Good morning${displayName ? ', ' + displayName : ''}`
@@ -75,12 +83,12 @@ export default function Dashboard() {
       if (!d.error) setPrefs(d)
     })
 
-    // Mood nudge — only mornings, once per day
+    // Mood nudge — 4 slots per day, slot-based cache
     const cached = getMoodNudgeCache()
     if (cached) {
       setMoodNudge(cached.data)
       setMoodNudgeDismissed(cached.dismissed)
-    } else if (isMorning) {
+    } else {
       setMoodNudgeLoading(true)
       setMoodNudgeDismissed(false)
       fetch('/api/suggest/mood').then(r => r.json()).then(d => {
@@ -91,7 +99,7 @@ export default function Dashboard() {
         setMoodNudgeLoading(false)
       }).catch(() => setMoodNudgeLoading(false))
     }
-  }, [today, isMorning])
+  }, [today])
 
   function dismissMoodNudge() {
     setMoodNudgeDismissed(true)
@@ -141,7 +149,18 @@ export default function Dashboard() {
 
       <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* ── Mood nudge (morning only, dismissible) ── */}
+        {/* ── Settings shortcut ── */}
+        <a href="/settings" style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px',
+          borderRadius: 14, border: '1px solid var(--border)', background: 'white',
+          textDecoration: 'none', color: 'inherit'
+        }}>
+          <span style={{ fontSize: 18 }}>⚙️</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', flex: 1 }}>Settings & preferences</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>›</span>
+        </a>
+
+        {/* ── Mood nudge (4x daily, dismissible) ── */}
         {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
           <div style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)', padding: 16, position: 'relative' }}>
             <button onClick={dismissMoodNudge} style={{ position: 'absolute', top: 10, right: 12, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18, lineHeight: 1, zIndex: 2 }}>×</button>
@@ -235,17 +254,7 @@ export default function Dashboard() {
                       ))}
                     </div>
                     {orders.length > 5 && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>+{orders.length - 5} more</p>}
-                    {qcApps.length > 0 && (
-                      <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                        {qcApps.map((app: any) => (
-                          <a key={app.url} href={app.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
-                            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 99,
-                            border: '1px solid var(--border)', background: 'white', textDecoration: 'none',
-                            fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
-                          }}>{app.emoji} {app.name}</a>
-                        ))}
-                      </div>
-                    )}
+
                   </>
               }
             </div>

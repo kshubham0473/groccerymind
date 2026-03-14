@@ -130,31 +130,50 @@ If the user's request is not food-related, return: [{"error": "Please describe a
 export async function getStarterDishes(context: {
   householdContext: string
 }): Promise<{ name: string; description: string; ingredients: string[]; cuisine_type: string }[]> {
-  const prompt = `You are setting up a meal plan for an Indian household.
+  const prompt = `You are building a weekly meal rotation for an Indian household.
 ${context.householdContext}
 
-Generate a list of 24 Indian dishes this household is likely to cook regularly, based on their preferences above.
-Include a good mix of:
-- Everyday staples (dal chawal, sabzi, paratha etc.)
-- Quick meals (poha, upma, eggs)
-- Weekend dishes (chole, rajma, biryani type)
-- Variety across cuisines they mentioned
+Generate exactly 24 DISTINCT dishes they would realistically cook at home.
 
-For each dish, list only the KEY ingredients to buy (exclude salt, oil, all spices/spice powders).
+STRICT RULES — violations mean the output is unusable:
+1. Every dish must have a UNIQUE name — no duplicates, no near-duplicates
+2. No two dishes can share the same primary ingredient as their defining feature (e.g. don't suggest both "Dal Tadka" and "Dal Fry" and "Moong Dal" — pick ONE dal dish; don't suggest both "Aloo Sabzi" and "Aloo Methi" — pick one)
+3. Spread across these 8 categories, roughly 3 dishes each:
+   - Everyday rice meals (dal chawal, khichdi, curd rice, etc.)
+   - Everyday roti/paratha meals (sabzi + roti, stuffed parathas)
+   - Quick breakfast/snack dishes (poha, upma, cheela, eggs)
+   - Legume-based (chole, rajma, channa — pick different legumes)
+   - Paneer dishes (max 2 paneer dishes total)
+   - Egg dishes (only if their dietary preference allows)
+   - Vegetable sabzis (pick DIFFERENT vegetables — not same veg twice)
+   - Occasional/weekend dishes (biryani, pulao, pav bhaji, etc.)
+4. Each dish's ingredients: list only items to BUY. NEVER include: salt, oil, ghee, butter, or ANY spice/spice powder (cumin, turmeric, garam masala, chilli powder, coriander powder, mustard seeds, hing, etc.)
+5. Max 5 ingredients per dish
 
-Return ONLY a JSON array, no markdown:
+Return ONLY a valid JSON array, no markdown, no commentary:
 [
   {
     "name": "Dal Chawal",
-    "description": "Comforting everyday lentils with rice",
+    "description": "Everyday comfort — yellow lentils with steamed rice",
     "cuisine_type": "North Indian",
-    "ingredients": ["dal", "rice", "onion", "tomato"]
+    "ingredients": ["toor dal", "rice", "onion", "tomato"]
   }
 ]`
   try {
     const raw = await callGeminiRaw(prompt)
     const dishes = JSON.parse(cleanJson(raw))
-    return Array.isArray(dishes) ? dishes.slice(0, 24) : []
+    if (!Array.isArray(dishes)) return []
+    
+    // Client-side dedup by normalised name as safety net
+    const seen = new Set<string>()
+    const deduped = dishes.filter((d: any) => {
+      if (!d.name) return false
+      const norm = d.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+      if (seen.has(norm)) return false
+      seen.add(norm)
+      return true
+    })
+    return deduped.slice(0, 24)
   } catch { return [] }
 }
 
@@ -186,20 +205,29 @@ Return ONLY valid JSON, no markdown:
 // ── Morning mood nudge ────────────────────────────────────────────────────────
 export async function getMoodNudge(context: {
   dayOfWeek: string
+  timeSlot?: string
   recentlyCooked: string[]
   householdContext?: string
 }): Promise<{ message: string; chips: string[] } | null> {
-  const prompt = `You are a warm, friendly Indian household kitchen assistant giving a morning nudge.
-Today is ${context.dayOfWeek}.
+  const timeContext = {
+    morning:   'morning — they are planning what to cook today',
+    midday:    'midday — lunchtime, they might be deciding what to make right now',
+    afternoon: 'afternoon — they are likely thinking about dinner',
+    evening:   'evening — winding down, reflecting on the day or planning tomorrow',
+  }[context.timeSlot || 'morning'] ?? 'daytime'
+
+  const prompt = `You are a warm, friendly Indian household kitchen assistant.
+Today is ${context.dayOfWeek}, ${timeContext}.
 Recently cooked: ${context.recentlyCooked.join(', ') || 'nothing logged yet'}
 ${context.householdContext || ''}
 
-Write ONE short, warm, conversational message (max 18 words) that:
-- Feels personal, not robotic
-- Gently prompts them to think about what to cook today
-- Varies by day of week or recent cooking pattern (e.g. Friday = treat yourself, Monday = keep it simple)
+Write ONE short, warm, conversational message (max 18 words) appropriate for this time of day.
+- Morning: what are they thinking of cooking today?
+- Midday: nudge about lunch
+- Afternoon: what's for dinner tonight?
+- Evening: light reflection or tomorrow's planning
 
-Also suggest 3 short quick-tap chips (2–4 words each) that represent different moods or cravings the user can tap to explore dishes.
+Also suggest 3 short quick-tap chips (2–4 words each) as mood/craving options relevant to this time of day.
 
 Return ONLY valid JSON, no markdown:
 {"message": "...", "chips": ["Something light", "Comfort food", "Quick to make"]}`

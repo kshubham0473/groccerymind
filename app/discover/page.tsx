@@ -14,12 +14,21 @@ const MOOD_COLORS: Record<string, { bg: string; color: string }> = {
 }
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
 
-// Example prompt chips to inspire users
-const PROMPT_EXAMPLES = [
+// Large pool — 6 shown at random each visit
+const PROMPT_POOL = [
   'Something with paneer', 'Quick under 20 mins', 'Light lunch today',
   'Comfort food for dinner', 'Something healthy', 'Use up the potatoes',
   'South Indian style', 'Something hearty', 'No onion today',
+  'Something warm for monsoon', 'High protein today', 'Dal but different',
+  'Use up the tomatoes', 'Street food style', 'Light on the stomach',
+  'Something kids will eat', 'Breakfast for dinner', 'Something creamy',
+  'Quick rice meal', 'No dairy today', 'Weekend special',
+  'Something with eggs', 'Bengali style', 'Maharashtrian flavours',
 ]
+function getRandomPrompts(n = 6) {
+  const shuffled = [...PROMPT_POOL].sort(() => Math.random() - 0.5)
+  return shuffled.slice(0, n)
+}
 
 function DiscoverContent() {
   const searchParams = useSearchParams()
@@ -155,7 +164,7 @@ function DiscoverContent() {
           {/* Example prompt chips */}
           {!generated && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {PROMPT_EXAMPLES.slice(0, 6).map(ex => (
+              {getRandomPrompts().map(ex => (
                 <button key={ex} onClick={() => { setPrompt(ex); setTimeout(() => inputRef.current?.focus(), 50) }} style={{
                   padding: '5px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500,
                   border: '1px solid var(--border)', background: 'white',

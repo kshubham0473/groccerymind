@@ -247,14 +247,17 @@ export default function SettingsPage() {
                 </div>
                 <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 16 }}>›</span>
               </a>
-              <button onClick={() => { localStorage.removeItem('gm_suggestion'); localStorage.removeItem('gm_mood_nudge'); alert('Cache cleared.') }} style={{
+              <button onClick={() => {
+                Object.keys(localStorage).filter(k => k.startsWith('gm_mood_')).forEach(k => localStorage.removeItem(k))
+                alert("Today's nudge reset — reopen dashboard to get a fresh one.")
+              }} style={{
                 width: '100%', padding: '12px 0', display: 'flex', alignItems: 'center', gap: 10,
                 background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left'
               }}>
                 <span>🗑️</span>
                 <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>Clear suggestion cache</p>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Forces fresh Gemini suggestions</p>
+                  <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>Reset today's nudge</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Clears cached nudge, shows a fresh one on next open</p>
                 </div>
               </button>
             </div>
