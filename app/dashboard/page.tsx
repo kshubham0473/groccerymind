@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useApp } from '@/components/AppProvider'
 import { PantryItem, OrderItem, DailyLock, HouseholdPreferences } from '@/types'
 
@@ -7,48 +8,53 @@ const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','satur
 
 function getTodayKey() { return DAYS[new Date().getDay()] }
 function getTodayISO() { return new Date().toISOString().split('T')[0] }
-function getTodayDateStr() { return new Date().toDateString() }
 
-function getCachedSuggestion() {
+// ── Mood nudge cache — one per day, dismissible ──────────────────────
+function getMoodNudgeCache() {
   try {
-    const raw = localStorage.getItem('gm_suggestion')
+    const raw = localStorage.getItem('gm_mood_nudge')
     if (!raw) return null
-    const { date, data } = JSON.parse(raw)
-    if (date !== getTodayDateStr()) return null
-    return data
+    const { date, data, dismissed } = JSON.parse(raw)
+    if (date !== new Date().toDateString()) return null
+    return { data, dismissed }
   } catch { return null }
 }
-function cacheSuggestion(data: any) {
-  try { localStorage.setItem('gm_suggestion', JSON.stringify({ date: getTodayDateStr(), data })) } catch {}
+function setMoodNudgeCache(data: any, dismissed = false) {
+  try { localStorage.setItem('gm_mood_nudge', JSON.stringify({ date: new Date().toDateString(), data, dismissed })) } catch {}
 }
 
-const QC_APPS = {
-  blinkit:  { name: 'Blinkit',    emoji: '🟡', url: 'https://blinkit.com' },
-  zepto:    { name: 'Zepto',      emoji: '🟣', url: 'https://www.zeptonow.com' },
-  swiggy:   { name: 'Swiggy Instamart', emoji: '🟠', url: 'https://www.swiggy.com/instamart' },
-  bigbasket:{ name: 'BigBasket',  emoji: '🟢', url: 'https://www.bigbasket.com' },
+const QC_APPS: Record<string, { name: string; emoji: string; url: string }> = {
+  blinkit:   { name: 'Blinkit',    emoji: '🟡', url: 'https://blinkit.com' },
+  zepto:     { name: 'Zepto',      emoji: '🟣', url: 'https://www.zeptonow.com' },
+  swiggy:    { name: 'Swiggy Instamart', emoji: '🟠', url: 'https://www.swiggy.com/instamart' },
+  bigbasket: { name: 'BigBasket',  emoji: '🟢', url: 'https://www.bigbasket.com' },
 }
 
 export default function Dashboard() {
   const { user, household, logout } = useApp()
+  const router = useRouter()
   const [lowItems, setLowItems] = useState<PantryItem[]>([])
   const [todaySlots, setTodaySlots] = useState<any[]>([])
   const [allSlots, setAllSlots] = useState<any[]>([])
   const [orders, setOrders] = useState<OrderItem[]>([])
   const [todayLocks, setTodayLocks] = useState<DailyLock[]>([])
-  const [suggestion, setSuggestion] = useState<{ lunch: string|null; dinner: string|null; reason: string }|null>(null)
-  const [suggestionLoading, setSuggestionLoading] = useState(true)
+  const [prefs, setPrefs] = useState<HouseholdPreferences>({})
   const [cookedToday, setCookedToday] = useState<Record<string, string>>({})
   const [showCookAnything, setShowCookAnything] = useState(false)
-  const [prefs, setPrefs] = useState<HouseholdPreferences>({})
+
+  // Mood nudge
+  const [moodNudge, setMoodNudge] = useState<{ message: string; chips: string[] } | null>(null)
+  const [moodNudgeDismissed, setMoodNudgeDismissed] = useState(true) // start hidden
+  const [moodNudgeLoading, setMoodNudgeLoading] = useState(false)
+
   const today = getTodayKey()
   const hour = new Date().getHours()
+  const isMorning = hour >= 6 && hour < 12
 
-  // Resolve display name for greeting
   const displayName = prefs.member_names?.[user?.username || ''] || user?.username || ''
-  const greeting = hour < 12 ? `Good morning${displayName ? ', ' + displayName : ''}` 
-                 : hour < 17 ? `Good afternoon${displayName ? ', ' + displayName : ''}`
-                 : `Good evening${displayName ? ', ' + displayName : ''}`
+  const greeting = hour < 12 ? `Good morning${displayName ? ', ' + displayName : ''}`
+    : hour < 17 ? `Good afternoon${displayName ? ', ' + displayName : ''}`
+    : `Good evening${displayName ? ', ' + displayName : ''}`
 
   useEffect(() => {
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
@@ -69,16 +75,33 @@ export default function Dashboard() {
       if (!d.error) setPrefs(d)
     })
 
-    const cached = getCachedSuggestion()
+    // Mood nudge — only mornings, once per day
+    const cached = getMoodNudgeCache()
     if (cached) {
-      setSuggestion(cached); setSuggestionLoading(false)
-    } else {
-      fetch(`/api/suggest/meal?day=${today}`).then(r => r.json()).then(d => {
-        if (d.suggestion) cacheSuggestion(d.suggestion)
-        setSuggestion(d.suggestion); setSuggestionLoading(false)
-      }).catch(() => setSuggestionLoading(false))
+      setMoodNudge(cached.data)
+      setMoodNudgeDismissed(cached.dismissed)
+    } else if (isMorning) {
+      setMoodNudgeLoading(true)
+      setMoodNudgeDismissed(false)
+      fetch('/api/suggest/mood').then(r => r.json()).then(d => {
+        if (d.nudge) {
+          setMoodNudge(d.nudge)
+          setMoodNudgeCache(d.nudge, false)
+        }
+        setMoodNudgeLoading(false)
+      }).catch(() => setMoodNudgeLoading(false))
     }
-  }, [today])
+  }, [today, isMorning])
+
+  function dismissMoodNudge() {
+    setMoodNudgeDismissed(true)
+    if (moodNudge) setMoodNudgeCache(moodNudge, true)
+  }
+
+  function handleMoodChip(chip: string) {
+    dismissMoodNudge()
+    router.push(`/discover?prompt=${encodeURIComponent(chip)}`)
+  }
 
   async function logCooked(slot: string, dish: string) {
     setCookedToday(p => ({ ...p, [slot]: dish }))
@@ -91,10 +114,7 @@ export default function Dashboard() {
   async function addToOrder(name: string) {
     const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_name: name, source: 'pantry' }) })
     const d = await res.json()
-    if (!d.error) {
-      setOrders(p => [...p, d])
-      setLowItems(p => p.filter(i => i.name !== name))
-    }
+    if (!d.error) { setOrders(p => [...p, d]); setLowItems(p => p.filter(i => i.name !== name)) }
   }
 
   const lunch = todaySlots.filter(s => s.slot === 'lunch')
@@ -102,7 +122,7 @@ export default function Dashboard() {
   const lunchLock = todayLocks.find(l => l.slot === 'lunch')
   const dinnerLock = todayLocks.find(l => l.slot === 'dinner')
   const allDishes = Array.from(new Map(allSlots.map(s => [s.dish?.name, s.dish])).values()).filter(Boolean)
-  const qcApps = (prefs.quickcommerce || []).map(k => QC_APPS[k]).filter(Boolean)
+  const qcApps = ((prefs.quickcommerce || []) as string[]).map((k: string) => QC_APPS[k]).filter(Boolean)
 
   if (!user) return null
 
@@ -118,11 +138,12 @@ export default function Dashboard() {
           <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>{household?.name}</p>
         </div>
         <button onClick={logout} style={{
-          position: 'absolute', top: 48, right: 20, background: 'rgba(255,255,255,0.15)',
-          border: 'none', color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+          position: 'absolute', top: 48, right: 20, zIndex: 2,
+          background: 'rgba(255,255,255,0.15)', border: 'none', color: 'rgba(255,255,255,0.8)',
+          padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
         }}>Sign out</button>
         <a href="/settings" style={{
-          position: 'absolute', top: 48, right: 88,
+          position: 'absolute', top: 48, right: 98, zIndex: 2,
           background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)',
           padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, textDecoration: 'none'
         }}>⚙️</a>
@@ -130,7 +151,42 @@ export default function Dashboard() {
 
       <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* ── Today's locked meals — primary status card ── */}
+        {/* ── Mood nudge (morning only, dismissible) ── */}
+        {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
+          <div style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)', padding: 16, position: 'relative' }}>
+            <button onClick={dismissMoodNudge} style={{ position: 'absolute', top: 10, right: 12, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18, lineHeight: 1, zIndex: 2 }}>×</button>
+            {moodNudgeLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="skeleton" style={{ height: 11, width: '70%', opacity: 0.3 }} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 32, width: 80, borderRadius: 99, opacity: 0.2 }} />)}
+                </div>
+              </div>
+            ) : moodNudge && (
+              <>
+                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, marginBottom: 12, paddingRight: 20 }}>
+                  {moodNudge.message}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {moodNudge.chips.map(chip => (
+                    <button key={chip} onClick={() => handleMoodChip(chip)} style={{
+                      padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
+                      background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                    }}>{chip}</button>
+                  ))}
+                  <button onClick={() => { dismissMoodNudge(); router.push('/discover') }} style={{
+                    padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
+                    background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)',
+                    fontSize: 13, cursor: 'pointer'
+                  }}>Explore all →</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Today's Decision (locks) ── */}
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -143,74 +199,28 @@ export default function Dashboard() {
             {[{ slot: 'lunch', label: '☀️ Lunch', lock: lunchLock, options: lunch },
               { slot: 'dinner', label: '🌙 Dinner', lock: dinnerLock, options: dinner }
             ].map(({ slot, label, lock, options }) => (
-              <div key={slot} style={{ marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
+              <div key={slot} style={{ marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, margin: 0 }}>{label}</p>
-                  {lock ? (
-                    <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)', margin: '3px 0 0' }}>
-                      {lock.dish_name}
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '3px 0 0' }}>
-                      {options.length > 0 ? `${options.length} options — not locked` : 'Nothing planned'}
-                    </p>
-                  )}
+                  {lock
+                    ? <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)', margin: '3px 0 0' }}>{lock.dish_name}</p>
+                    : <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '3px 0 0' }}>
+                        {options.length > 0 ? `${options.length} options — not locked` : 'Nothing planned'}
+                      </p>
+                  }
                 </div>
-                {lock ? (
-                  cookedToday[slot] === lock.dish_name
-                    ? <span className="pill badge-good">✓ Cooked</span>
-                    : <button onClick={() => logCooked(slot, lock.dish_name)} style={{ padding: '6px 14px', borderRadius: 99, border: 'none', background: 'var(--green-deep)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cooked it</button>
-                ) : options.length > 0 ? (
-                  <a href="/meal-plan" style={{ padding: '6px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'white', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Lock →</a>
-                ) : null}
+                <div style={{ flexShrink: 0 }}>
+                  {lock
+                    ? cookedToday[slot] === lock.dish_name
+                      ? <span className="pill badge-good">✓ Cooked</span>
+                      : <button onClick={() => logCooked(slot, lock.dish_name)} style={{ padding: '6px 14px', borderRadius: 99, border: 'none', background: 'var(--green-deep)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cooked ✓</button>
+                    : options.length > 0
+                      ? <a href="/meal-plan" style={{ padding: '6px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'white', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>Lock →</a>
+                      : null
+                  }
+                </div>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* ── Smart Pick ── */}
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>✨</span>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green-mid)' }}>Smart Pick</span>
-            </div>
-            {!suggestionLoading && (
-              <button onClick={() => {
-                localStorage.removeItem('gm_suggestion'); setSuggestionLoading(true)
-                fetch(`/api/suggest/meal?day=${today}`).then(r => r.json()).then(d => {
-                  if (d.suggestion) cacheSuggestion(d.suggestion)
-                  setSuggestion(d.suggestion); setSuggestionLoading(false)
-                }).catch(() => setSuggestionLoading(false))
-              }} style={{ background: 'none', border: 'none', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer' }}>↻ Refresh</button>
-            )}
-          </div>
-          <div style={{ padding: 14 }}>
-            {suggestionLoading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div className="skeleton" style={{ height: 11, width: '80%' }} />
-                <div className="skeleton" style={{ height: 40, borderRadius: 10, marginTop: 4 }} />
-              </div>
-            ) : suggestion ? (
-              <>
-                <p style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: 10, lineHeight: 1.5 }}>"{suggestion.reason}"</p>
-                {[{ slot: 'lunch', emoji: '☀️', dish: suggestion.lunch }, { slot: 'dinner', emoji: '🌙', dish: suggestion.dinner }]
-                  .filter(s => s.dish).map(({ slot, emoji, dish }) => (
-                  <div key={slot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: 12, marginBottom: 6, background: 'var(--cream)' }}>
-                    <div>
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, margin: 0 }}>{emoji} {slot}</p>
-                      <p className="font-display" style={{ fontSize: 14, fontWeight: 700, margin: '2px 0 0' }}>{dish}</p>
-                    </div>
-                    {cookedToday[slot] === dish
-                      ? <span className="pill badge-good">✓ Logged</span>
-                      : <button onClick={() => logCooked(slot, dish!)} style={{ background: 'var(--green-deep)', color: 'white', border: 'none', padding: '6px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Making this</button>
-                    }
-                  </div>
-                ))}
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Add meal options to get smart suggestions.</p>
-            )}
           </div>
         </div>
 
@@ -226,30 +236,28 @@ export default function Dashboard() {
               <span style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 600 }}>View →</span>
             </div>
             <div style={{ padding: '10px 16px 14px' }}>
-              {orders.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nothing to order</p>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {orders.slice(0, 5).map(o => (
-                      <span key={o.id} style={{ padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600, background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>{o.item_name}</span>
-                    ))}
-                  </div>
-                  {orders.length > 5 && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>+{orders.length - 5} more</p>}
-                  {/* Quick commerce links */}
-                  {qcApps.length > 0 && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                      {qcApps.map(app => (
-                        <a key={app.url} href={app.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
-                          display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 99,
-                          border: '1px solid var(--border)', background: 'white', textDecoration: 'none',
-                          fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
-                        }}>{app.emoji} {app.name}</a>
+              {orders.length === 0
+                ? <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nothing to order right now</p>
+                : <>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {orders.slice(0, 5).map(o => (
+                        <span key={o.id} style={{ padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600, background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>{o.item_name}</span>
                       ))}
                     </div>
-                  )}
-                </>
-              )}
+                    {orders.length > 5 && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>+{orders.length - 5} more</p>}
+                    {qcApps.length > 0 && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                        {qcApps.map((app: any) => (
+                          <a key={app.url} href={app.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
+                            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 99,
+                            border: '1px solid var(--border)', background: 'white', textDecoration: 'none',
+                            fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
+                          }}>{app.emoji} {app.name}</a>
+                        ))}
+                      </div>
+                    )}
+                  </>
+              }
             </div>
           </div>
         </a>
@@ -280,6 +288,13 @@ export default function Dashboard() {
         <button onClick={() => setShowCookAnything(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid var(--border)', background: 'white', fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>
           🍳 Cooking something not on the plan?
         </button>
+
+        {user.role === 'admin' && (
+          <a href="/admin" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)', background: 'white', textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 13 }}>
+            <span>⚙️</span><span style={{ fontWeight: 600 }}>Admin panel</span>
+            <span style={{ marginLeft: 'auto', fontSize: 16 }}>›</span>
+          </a>
+        )}
       </div>
 
       {/* Cook anything sheet */}

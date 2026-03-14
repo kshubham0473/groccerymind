@@ -13,11 +13,24 @@ export interface Household {
 }
 
 export interface HouseholdPreferences {
-  dislikes?: string
-  cuisine_prefs?: string[]
-  dietary?: string
-  quickcommerce?: ('blinkit' | 'zepto' | 'swiggy' | 'bigbasket')[]
+  // Identity
   member_names?: Record<string, string>
+  // Food identity
+  dietary?: string
+  cuisine_prefs?: string[]
+  dislikes?: string
+  // Richer data points (new)
+  meal_complexity?: string        // 'simple' | 'moderate' | 'elaborate'
+  cooking_time?: string           // 'under 20 mins' | '20–40 mins' | 'no limit'
+  meal_variety?: string           // 'same dishes' | 'moderate mix' | 'always new'
+  spice_level?: string            // 'mild' | 'medium' | 'spicy'
+  protein_prefs?: string[]        // ['paneer', 'dal', 'eggs', 'chicken', 'tofu', ...]
+  meal_occasions?: string[]       // ['weekday lunch', 'weekday dinner', 'weekend special', 'guests']
+  health_goals?: string[]         // ['high protein', 'low oil', 'gut-friendly', 'weight loss', 'no goals']
+  texture_prefs?: string[]        // ['dry sabzi', 'gravy dishes', 'rice meals', 'breads', 'one-pot']
+  // App config
+  quickcommerce?: ('blinkit' | 'zepto' | 'swiggy' | 'bigbasket')[]
+  onboarding_complete?: boolean
 }
 
 export interface Dish {
@@ -41,7 +54,7 @@ export interface MealSlot {
 export interface DailyLock {
   id: string
   household_id: string
-  lock_date: string        // YYYY-MM-DD
+  lock_date: string
   slot: 'lunch' | 'dinner'
   dish_id: string | null
   dish_name: string

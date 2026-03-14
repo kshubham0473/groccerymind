@@ -50,6 +50,7 @@ body {
   position: relative;
 }
 .page-header::after {
+  z-index: 0;
   content: '';
   position: absolute;
   bottom: -1px; left: 0; right: 0;
@@ -107,3 +108,8 @@ body {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+.page-header-btn {
+  position: relative;
+  z-index: 2;
+}
