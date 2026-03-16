@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!items?.length) return NextResponse.json({ updated: 0 })
 
   const now = new Date()
-  const updates: { id: string; stock_status: string }[] = []
+  const updates: { id: string; stock_status: string; depletion_source: string }[] = []
 
   for (const item of items) {
     if (!item.last_ordered_at) continue
@@ -37,13 +37,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (newStatus !== item.stock_status) {
-      updates.push({ id: item.id, stock_status: newStatus })
+      updates.push({ id: item.id, stock_status: newStatus, depletion_source: 'auto' })
     }
   }
 
   // Batch update
-  await Promise.all(updates.map(u =>
-    supabase.from('pantry_items').update({ stock_status: u.stock_status }).eq('id', u.id)
+  await Promise.all(updates.map((u: any) =>
+    supabase.from('pantry_items').update({ stock_status: u.stock_status, depletion_source: u.depletion_source }).eq('id', u.id)
   ))
 
   return NextResponse.json({ updated: updates.length, changes: updates })

@@ -173,7 +173,7 @@ export default function OrdersPage() {
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Weekly Shop</p>
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Order List</h1>
           <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>
-            {pending.length} to order{maybe.length > 0 ? ` · ${maybe.length} maybe` : ''}
+            {pending.length} to order{maybe.length > 0 ? ` · ${maybe.length} not immediate` : ''}
           </p>
         </div>
         {pending.length > 0 && (
@@ -233,10 +233,10 @@ export default function OrdersPage() {
         </div>
 
         {/* ── TO ORDER ── */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card">
           <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>To Order</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>To Order (Immediate)</span>
               {pending.length > 0 && (
                 <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--amber-light)', color: 'var(--amber)' }}>{pending.length}</span>
               )}
@@ -252,30 +252,30 @@ export default function OrdersPage() {
         </div>
 
         {/* ── MAYBE ── */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card">
           <button onClick={() => setShowMaybe(p => !p)} style={{
             width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             borderBottom: showMaybe && maybe.length > 0 ? '1px solid var(--border)' : 'none'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Maybe</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Not Immediate</span>
               {maybe.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--cream)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>{maybe.length}</span>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Not sure yet</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Can wait</span>
               <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{showMaybe ? '▲' : '▼'}</span>
             </div>
           </button>
           {showMaybe && (
             maybe.length === 0
-              ? <p style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Move items here from the ⋯ menu when you're not sure.</p>
+              ? <p style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Move items here when you don't need them right away.</p>
               : maybe.map(item => <OrderRow key={item.id} item={item as any} onSetStatus={setStatus} onDelete={deleteItem} isMaybe />)
           )}
         </div>
 
         {/* ── SMART SUGGESTIONS (collapsible) ── */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card">
           <button onClick={() => setShowSuggestions(p => !p)} style={{
             width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -323,7 +323,7 @@ export default function OrdersPage() {
 
         {/* ── ORDERED ── */}
         {ordered.length > 0 && (
-          <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="card">
             <button onClick={() => setShowOrdered(p => !p)} style={{
               width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -388,12 +388,12 @@ function OrderRow({ item, onSetStatus, onDelete, isMaybe = false, isOrdered = fa
           }}>
             {!isMaybe && !isOrdered && (
               <button onClick={() => onSetStatus(item.id, 'maybe')} style={{ width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>
-                🤔 Move to Maybe
+                🕐 Not Immediate
               </button>
             )}
             {isMaybe && (
               <button onClick={() => onSetStatus(item.id, 'pending')} style={{ width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 500, color: 'var(--green-mid)', borderBottom: '1px solid var(--border)' }}>
-                ← Move to Order
+                ← Back to Immediate
               </button>
             )}
             {isOrdered && (

@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hour = new Date().getHours()
+  // Use IST offset (UTC+5:30) so time slots are correct for Indian users
+  const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  const hour = nowIST.getUTCHours()
   const timeSlot = getTimeSlot(hour)
   const dayOfWeek = DAYS[new Date().getDay()]
   const supabase = createServiceClient()
@@ -33,8 +35,9 @@ export async function GET(req: NextRequest) {
   const feedback = feedbackRes.data || []
   const householdContext = buildHouseholdContext(prefs, feedback)
 
+  const userName = (prefs.member_names || {})[user.username] || ''
   try {
-    const nudge = await getMoodNudge({ dayOfWeek, timeSlot, recentlyCooked, householdContext })
+    const nudge = await getMoodNudge({ dayOfWeek, timeSlot, recentlyCooked, householdContext, userName })
     return NextResponse.json({ nudge, timeSlot })
   } catch (e: any) {
     return NextResponse.json({ nudge: null, error: e.message })

@@ -73,6 +73,8 @@ export default function SettingsPage() {
 
   // Admin state
   const [addingMember, setAddingMember] = useState(false)
+  const [invites, setInvites] = useState<any[]>([])
+  const [creatingInvite, setCreatingInvite] = useState(false)
   const [newMemberForm, setNewMemberForm] = useState({ username: '', password: '', role: 'member' })
   const [adminSaving, setAdminSaving] = useState(false)
   const [adminError, setAdminError] = useState('')
@@ -80,6 +82,9 @@ export default function SettingsPage() {
   useEffect(() => {
     if (household) setHouseholdName(household.name)
     fetch('/api/admin/users').then(r => r.json()).then(d => { if (Array.isArray(d)) setMembers(d) })
+    if (user?.role === 'admin') {
+      fetch('/api/invites').then(r => r.json()).then(d => { if (Array.isArray(d)) setInvites(d) }).catch(() => {})
+    }
     fetch('/api/preferences').then(r => r.json()).then(d => {
       if (d.error) return
       if (d.member_names) setMemberNames(d.member_names)
@@ -121,6 +126,19 @@ export default function SettingsPage() {
     if (d.error) { setAdminError(d.error); setAdminSaving(false); return }
     setMembers(p => [...p, d]); setAddingMember(false)
     setNewMemberForm({ username: '', password: '', role: 'member' }); setAdminSaving(false)
+  }
+
+  async function createInvite() {
+    setCreatingInvite(true)
+    const res = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ max_uses: 2, expires_days: 30 }) })
+    const d = await res.json()
+    if (!d.error) setInvites(p => [d, ...p])
+    setCreatingInvite(false)
+  }
+
+  async function revokeInvite(id: string) {
+    await fetch('/api/invites', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    setInvites(p => p.filter(i => i.id !== id))
   }
 
   const handleTextureChange = (v: string[]) => {
@@ -239,6 +257,33 @@ export default function SettingsPage() {
               )}
             </div>
             <div style={{ padding: '0 16px 4px', borderTop: '1px solid var(--border)' }}>
+              {/* Invite codes */}
+              <div style={{ padding: '12px 16px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Invite Codes</p>
+                  <button onClick={createInvite} disabled={creatingInvite} style={{ padding: '5px 12px', borderRadius: 99, border: 'none', background: 'var(--green-mid)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    {creatingInvite ? '...' : '+ New'}
+                  </button>
+                </div>
+                {invites.length === 0 ? (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, fontStyle: 'italic' }}>No active invite codes. Create one to share.</p>
+                ) : invites.map(inv => (
+                  <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div>
+                      <p style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--green-deep)', margin: 0, fontFamily: 'monospace' }}>{inv.code}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        {inv.uses_so_far}/{inv.max_uses} used · expires {new Date(inv.expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => { navigator.clipboard?.writeText(inv.code); alert('Code copied!') }} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'white', fontSize: 12, cursor: 'pointer', color: 'var(--text-secondary)' }}>Copy</button>
+                      <button onClick={() => revokeInvite(inv.id)} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid var(--red-light)', background: 'var(--red-light)', fontSize: 12, cursor: 'pointer', color: 'var(--red)' }}>Revoke</button>
+                    </div>
+                  </div>
+                ))}
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, marginBottom: 12 }}>Share codes with new households. Each code allows up to 2 people to join.</p>
+              </div>
+
               <a href="/onboarding" style={{ display: 'flex', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit', gap: 10 }}>
                 <span>🔄</span>
                 <div>

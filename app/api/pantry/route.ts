@@ -38,7 +38,9 @@ export async function PATCH(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, ...updates } = await req.json()
+  const { id, ...rawUpdates } = await req.json()
+  // If user is manually setting stock_status, mark source as manual
+  const updates = rawUpdates.stock_status ? { ...rawUpdates, depletion_source: 'manual' } : rawUpdates
   const supabase = createServiceClient()
 
   const { data, error } = await supabase

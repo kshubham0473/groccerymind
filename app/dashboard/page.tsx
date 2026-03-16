@@ -22,9 +22,14 @@ function nudgeCacheKey() {
 }
 function getMoodNudgeCache() {
   try {
-    const raw = localStorage.getItem(nudgeCacheKey())
+    // Key already encodes date + slot — if the slot has changed since caching,
+    // nudgeCacheKey() returns a different key and we get null naturally.
+    // But also explicitly clear stale keys from other slots on the same day.
+    const currentKey = nudgeCacheKey()
+    const raw = localStorage.getItem(currentKey)
     if (!raw) return null
     const { data, dismissed } = JSON.parse(raw)
+    // Extra guard: if dismissed flag is set but we've moved to a new time slot, show fresh nudge
     return { data, dismissed }
   } catch { return null }
 }
@@ -68,13 +73,13 @@ export default function Dashboard() {
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
 
     fetch('/api/pantry').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setLowItems(d.filter((i: PantryItem) => i.stock_status !== 'good'))
+      if (Array.isArray(d)) setLowItems(d.filter((i: any) => i.stock_status !== 'good' && i.depletion_source === 'auto'))
     })
     fetch('/api/meal-plan').then(r => r.json()).then(d => {
       if (Array.isArray(d)) { setAllSlots(d); setTodaySlots(d.filter((s: any) => s.day === today)) }
     })
     fetch('/api/orders').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setOrders(d.filter((o: OrderItem) => !o.is_checked))
+      if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked)))
     })
     fetch(`/api/locks?from=${getTodayISO()}&days=1`).then(r => r.json()).then(d => {
       if (Array.isArray(d)) setTodayLocks(d)

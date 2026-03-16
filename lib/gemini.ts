@@ -129,55 +129,70 @@ If the user's request is not food-related, return: [{"error": "Please describe a
 // ── Onboarding: generate starter dish shortlist ───────────────────────────────
 export async function getStarterDishes(context: {
   householdContext: string
-}): Promise<{ name: string; description: string; ingredients: string[]; cuisine_type: string }[]> {
+}): Promise<{
+  name: string; description: string; meal_pairing: string
+  cuisine_type: string; complexity: string; cooking_time_mins: number
+  is_vegetarian: boolean; tags: string[]
+  ingredients: { name: string; category: string; tier: string; depletion_days: number }[]
+}[]> {
   const prompt = `You are building a weekly meal rotation for an Indian household.
 ${context.householdContext}
 
-Generate exactly 24 DISTINCT dishes they would realistically cook at home.
+Generate exactly 24 DISTINCT dishes for their weekly rotation.
 
-STRICT RULES — violations mean the output is unusable:
+STRICT RULES:
 1. Every dish must have a UNIQUE name — no duplicates, no near-duplicates
-2. No two dishes can share the same primary ingredient as their defining feature (e.g. don't suggest both "Dal Tadka" and "Dal Fry" and "Moong Dal" — pick ONE dal dish; don't suggest both "Aloo Sabzi" and "Aloo Methi" — pick one)
-3. Spread across these 8 categories, roughly 3 dishes each:
-   - Everyday rice meals (dal chawal, khichdi, curd rice, etc.)
-   - Everyday roti/paratha meals (sabzi + roti, stuffed parathas)
+2. No two dishes can share the same primary defining ingredient (e.g. don't suggest both "Dal Tadka" AND "Dal Fry" — pick ONE dal dish; not both "Aloo Sabzi" AND "Aloo Methi")
+3. Spread across 8 categories (~3 dishes each):
+   - Everyday rice meals (dal chawal, khichdi, etc.)
+   - Everyday roti/paratha meals
    - Quick breakfast/snack dishes (poha, upma, cheela, eggs)
-   - Legume-based (chole, rajma, channa — pick different legumes)
-   - Paneer dishes (max 2 paneer dishes total)
-   - Egg dishes (only if their dietary preference allows)
-   - Vegetable sabzis (pick DIFFERENT vegetables — not same veg twice)
-   - Occasional/weekend dishes (biryani, pulao, pav bhaji, etc.)
-4. Each dish's ingredients: list only items to BUY. NEVER include: salt, oil, ghee, butter, or ANY spice/spice powder (cumin, turmeric, garam masala, chilli powder, coriander powder, mustard seeds, hing, etc.)
-5. Max 5 ingredients per dish
+   - Legume-based (chole, rajma — pick DIFFERENT legumes)
+   - Paneer dishes (max 2 total)
+   - Egg dishes (only if dietary allows)
+   - Vegetable sabzis (DIFFERENT vegetables each)
+   - Weekend/special dishes
+4. meal_pairing: what this dish is typically served with (e.g. "with Steamed Rice", "with Roti", standalone)
+5. complexity: "quick" (<20 min), "moderate" (20-40 min), "elaborate" (>40 min)
+6. tags: 1-3 from: ["high-protein","low-oil","one-pot","kid-friendly","monsoon","summer","festive","quick","comfort"]
+7. ingredients: list ONLY items to buy — specific grocery items (NOT "mixed vegetables", NOT "oil", NOT "spices/masala"). Each ingredient MUST have category, tier, and depletion_days:
+   - category: "Vegetables" | "Leafy Greens" | "Dairy" | "Eggs" | "Grains & Lentils" | "Bakery" | "Condiments" | "Packaged"
+   - tier: "fresh" (spoils in days) | "weekly" (1-2 weeks) | "staple" (months)
+   - depletion_days: realistic number (fresh veggies: 4-7, dairy: 3-5, staples: 21-60)
 
-Return ONLY a valid JSON array, no markdown, no commentary:
+Return ONLY a valid JSON array, no markdown:
 [
   {
-    "name": "Dal Chawal",
-    "description": "Everyday comfort — yellow lentils with steamed rice",
+    "name": "Dal Tadka",
+    "description": "Smoky tempered lentils — the weekday anchor",
+    "meal_pairing": "with Steamed Rice and Papad",
     "cuisine_type": "North Indian",
-    "ingredients": ["toor dal", "rice", "onion", "tomato"]
+    "complexity": "moderate",
+    "cooking_time_mins": 30,
+    "is_vegetarian": true,
+    "tags": ["comfort", "high-protein"],
+    "ingredients": [
+      {"name": "Toor Dal", "category": "Grains & Lentils", "tier": "staple", "depletion_days": 30},
+      {"name": "Onion", "category": "Vegetables", "tier": "fresh", "depletion_days": 7},
+      {"name": "Tomato", "category": "Vegetables", "tier": "fresh", "depletion_days": 5}
+    ]
   }
 ]`
   try {
     const raw = await callGeminiRaw(prompt)
     const dishes = JSON.parse(cleanJson(raw))
     if (!Array.isArray(dishes)) return []
-    
-    // Client-side dedup by normalised name as safety net
+    // Client-side dedup by normalised name
     const seen = new Set<string>()
-    const deduped = dishes.filter((d: any) => {
+    return dishes.filter((d: any) => {
       if (!d.name) return false
       const norm = d.name.toLowerCase().replace(/[^a-z0-9]/g, '')
       if (seen.has(norm)) return false
       seen.add(norm)
       return true
-    })
-    return deduped.slice(0, 24)
+    }).slice(0, 24)
   } catch { return [] }
 }
-
-// ── Meal suggestion ───────────────────────────────────────────────────────────
 export async function getMealSuggestion(context: {
   today: string
   lunchOptions: string[]
@@ -203,34 +218,82 @@ Return ONLY valid JSON, no markdown:
 }
 
 // ── Morning mood nudge ────────────────────────────────────────────────────────
+// Indian festival calendar — major festivals by month-day
+const INDIAN_FESTIVALS: Record<string, string> = {
+  '01-14': 'Makar Sankranti', '01-15': 'Makar Sankranti',
+  '01-26': 'Republic Day',
+  '03-25': 'Holi', '03-26': 'Holi',
+  '04-14': 'Baisakhi / Ambedkar Jayanti',
+  '08-15': 'Independence Day',
+  '08-26': 'Janmashtami', '08-27': 'Janmashtami',
+  '09-07': 'Ganesh Chaturthi', '09-08': 'Ganesh Chaturthi',
+  '10-02': 'Gandhi Jayanti',
+  '10-12': 'Navratri', '10-13': 'Navratri', '10-20': 'Dussehra',
+  '11-01': 'Diwali', '11-02': 'Diwali',
+  '11-15': 'Guru Nanak Jayanti',
+  '12-25': 'Christmas',
+}
+
+function getTodayFestival(): string | null {
+  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000) // IST
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(now.getUTCDate()).padStart(2, '0')
+  return INDIAN_FESTIVALS[`${mm}-${dd}`] || null
+}
+
 export async function getMoodNudge(context: {
   dayOfWeek: string
   timeSlot?: string
   recentlyCooked: string[]
   householdContext?: string
+  userName?: string
 }): Promise<{ message: string; chips: string[] } | null> {
+  const slot = context.timeSlot || 'morning'
   const timeContext = {
-    morning:   'morning — they are planning what to cook today',
-    midday:    'midday — lunchtime, they might be deciding what to make right now',
-    afternoon: 'afternoon — they are likely thinking about dinner',
-    evening:   'evening — winding down, reflecting on the day or planning tomorrow',
-  }[context.timeSlot || 'morning'] ?? 'daytime'
+    morning:   "morning (7–11am) — planning the day's cooking",
+    midday:    "midday (11am–3pm) — lunchtime decision",
+    afternoon: "afternoon (3–7pm) — thinking about dinner",
+    evening:   "evening (7pm+) — winding down, maybe planning tomorrow",
+  }[slot] ?? 'daytime'
 
-  const prompt = `You are a warm, friendly Indian household kitchen assistant.
+  const festival = getTodayFestival()
+  const festivalLine = festival ? `Today is ${festival} — a great reason to cook something special!` : ''
+  const nameLine = context.userName ? `The user's name is ${context.userName}.` : ''
+
+  // Rotate personality styles — picked fresh each call for variety
+  const personalities = [
+    'cheeky and witty — use a food pun or clever wordplay',
+    'warm and encouraging like a caring auntie',
+    'philosophical and slightly dramatic about food',
+    'playful and humorous — make them smile',
+    'concise and sharp — one punchy line',
+  ]
+  const personality = personalities[Math.floor(Math.random() * personalities.length)]
+
+  const prompt = `You are a personality-rich Indian household kitchen assistant.
+Personality for this message: ${personality}
+${nameLine}
 Today is ${context.dayOfWeek}, ${timeContext}.
-Recently cooked: ${context.recentlyCooked.join(', ') || 'nothing logged yet'}
+${festivalLine}
+Recently cooked by this household: ${context.recentlyCooked.join(', ') || 'nothing logged yet'}
 ${context.householdContext || ''}
 
-Write ONE short, warm, conversational message (max 18 words) appropriate for this time of day.
-- Morning: what are they thinking of cooking today?
-- Midday: nudge about lunch
-- Afternoon: what's for dinner tonight?
-- Evening: light reflection or tomorrow's planning
+Write ONE short message (max 20 words) perfectly suited to this time of day and context.
+Rules:
+- If morning: something about planning today's meals
+- If midday: a nudge about what's for lunch right now
+- If afternoon: build anticipation about dinner
+- If evening: reflection or light planning for tomorrow
+- If it's a festival day, weave that in naturally
+- Use the user's name if provided (max once, naturally)
+- Match the personality style — be memorable, not generic
+- No hashtags, no emojis in the text itself
 
-Also suggest 3 short quick-tap chips (2–4 words each) as mood/craving options relevant to this time of day.
+Then suggest 3 quick-tap chips (2–4 words) that match the time of day and personality.
+Chips should vary in mood — one practical, one indulgent, one playful/unexpected.
 
 Return ONLY valid JSON, no markdown:
-{"message": "...", "chips": ["Something light", "Comfort food", "Quick to make"]}`
+{"message": "...", "chips": ["Dal makhani weather?", "Something crunchy", "Surprise us"]}`
   try {
     return JSON.parse(cleanJson(await callGeminiRaw(prompt)))
   } catch { return null }
