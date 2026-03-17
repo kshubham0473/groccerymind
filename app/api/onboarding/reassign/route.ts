@@ -1,41 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
-import { callGeminiRaw, cleanJson, buildHouseholdContext } from '@/lib/gemini'
+import { getReplacementDish, callGeminiRaw, cleanJson } from '@/lib/gemini'
 
-// POST — regenerate a single dish suggestion
 export async function POST(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { exclude_names } = await req.json()
+  const { exclude_names, category_hint } = await req.json()
+
   const supabase = createServiceClient()
+  const { data } = await supabase
+    .from('households')
+    .select('preferences')
+    .eq('id', user.household_id)
+    .single()
 
-  const { data } = await supabase.from('households').select('preferences').eq('id', user.household_id).single()
   const prefs = data?.preferences || {}
-  const householdContext = buildHouseholdContext(prefs, [])
 
-  const prompt = `You are setting up a meal plan for an Indian household.
-${householdContext}
+  // Get replacement from corpus — no Gemini needed for selection
+  const replacement = getReplacementDish(exclude_names || [], prefs, category_hint)
 
-Suggest ONE dish this household would enjoy cooking regularly.
-It must NOT be any of these already suggested: ${(exclude_names || []).join(', ')}
-The dish should be a real, well-known Indian recipe suitable for weekday cooking.
-Exclude salt, oil, and all spices from ingredients.
-
-Return ONLY a JSON object, no markdown:
-{
-  "name": "Dish Name",
-  "description": "one appetising sentence",
-  "cuisine_type": "North Indian",
-  "ingredients": ["ingredient1", "ingredient2", "ingredient3"]
-}`
-
-  try {
-    const raw = await callGeminiRaw(prompt)
-    const dish = JSON.parse(cleanJson(raw))
-    return NextResponse.json({ dish })
-  } catch (e: any) {
-    return NextResponse.json({ dish: null, error: e.message })
+  if (!replacement) {
+    return NextResponse.json({ dish: null, error: 'No suitable replacement found in corpus' })
   }
+
+  // Get a description for it
+  let description = ''
+  try {
+    const raw = await callGeminiRaw(
+      `Write a single appetising one-sentence description (8-12 words) for the Indian dish "${replacement.name}". Do not start with the dish name. Return only the sentence, no quotes.`
+    )
+    description = raw.trim().replace(/^["']|["']$/g, '')
+  } catch { /* fine, description stays empty */ }
+
+  return NextResponse.json({
+    dish: {
+      name:          replacement.name,
+      description,
+      meal_pairing:  replacement.meal_pairing || '',
+      cuisine_type:  replacement.cuisine_type || 'Indian',
+      complexity:    replacement.complexity || 'moderate',
+      is_vegetarian: replacement.is_vegetarian !== false,
+      tags:          replacement.tags || [],
+      youtube_url:   replacement.youtube_url || '',
+      ingredients:   [],
+      _category:     replacement._category || category_hint || '',
+    }
+  })
 }

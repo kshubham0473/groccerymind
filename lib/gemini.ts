@@ -150,155 +150,552 @@ If the user's request is not food-related, return: [{"error": "Please describe a
 }
 
 // ── Onboarding: generate starter dish shortlist ───────────────────────────────
-// ── Corpus-aware dish selection ───────────────────────────────────────────────
-// When lib/dishes-corpus.json exists (after running the YouTube scraper),
-// we select from real curated dishes instead of generating from scratch.
-// Falls back to Gemini generation if the corpus doesn't exist or is empty.
+// ── Hindi↔English ingredient synonym map ────────────────────────────────────
+// Used in dislike filtering and ingredient matching throughout the app.
+// Covers common transliterations that appear in dish names and user input.
+const HINDI_SYNONYMS: Record<string, string[]> = {
+  onion:        ['onion','pyaaz','kanda','pyaz'],
+  garlic:       ['garlic','lahsun','lasun','lasoon'],
+  ginger:       ['ginger','adrak'],
+  potato:       ['potato','aloo','alu'],
+  tomato:       ['tomato','tamatar'],
+  spinach:      ['spinach','palak'],
+  fenugreek:    ['fenugreek','methi'],
+  bittergourd:  ['bitter gourd','bitter-gourd','karela','kerala'],
+  cauliflower:  ['cauliflower','gobi','gobhi'],
+  okra:         ['okra','bhindi','ladyfinger','lady finger'],
+  brinjal:      ['brinjal','eggplant','baingan','begun','vangi'],
+  peas:         ['peas','matar','mattar'],
+  bottlegourd:  ['bottle gourd','lauki','ghia','dudhi'],
+  ridgegourd:   ['ridge gourd','turai','toorai','torai'],
+  roundgourd:   ['round gourd','tinda','tinde'],
+  drumstick:    ['drumstick','moringa','sehjan'],
+  banana:       ['banana','kela'],
+  lemon:        ['lemon','nimbu'],
+  corn:         ['corn','maize','makka','bhutta'],
+  mushroom:     ['mushroom','khumb'],
+  jackfruit:    ['jackfruit','kathal'],
+  rawmango:     ['raw mango','kairi','kachha aam','keri'],
+  coconut:      ['coconut','nariyal','nariyal'],
+  curd:         ['curd','yogurt','dahi'],
+  paneer:       ['paneer','cottage cheese'],
+  chicken:      ['chicken','murgi','murg'],
+  mutton:       ['mutton','gosht','lamb'],
+  fish:         ['fish','machli','machli'],
+  egg:          ['egg','anda','ande'],
+  rice:         ['rice','chawal','chaawal'],
+  wheat:        ['wheat','atta','gehun'],
+  lentil:       ['lentil','dal','daal','dhal'],
+  chickpea:     ['chickpea','chole','chana','chhole'],
+  kidney:       ['kidney bean','rajma','rajmah'],
+  blackgram:    ['black gram','urad','urad dal'],
+  greengram:    ['green gram','moong','mung'],
+  bengalgram:   ['bengal gram','chana dal','besan'],
+}
+
+// Build a flat map: any known synonym → canonical English name
+const SYNONYM_FLAT = new Map<string, string>()
+for (const [canonical, synonyms] of Object.entries(HINDI_SYNONYMS)) {
+  for (const syn of synonyms) {
+    SYNONYM_FLAT.set(syn.toLowerCase(), canonical)
+  }
+}
+
+// Expand a user-typed word to all its known synonyms for matching
+function expandSynonyms(word: string): string[] {
+  const w = word.toLowerCase().trim()
+  const canonical = SYNONYM_FLAT.get(w)
+  if (!canonical) return [w]
+  return HINDI_SYNONYMS[canonical] || [w]
+}
+
+// Check if a dish name contains any of the dislike terms (with synonym expansion)
+function matchesDislikes(dishName: string, dislikeWords: string[]): boolean {
+  const n = dishName.toLowerCase()
+  for (const word of dislikeWords) {
+    const variants = expandSynonyms(word)
+    if (variants.some(v => n.includes(v))) return true
+  }
+  return false
+}
+
+// ── Skip list — titles that should never appear in a meal plan ───────────────
+const SKIP_WORDS = [
+  'halwa','kheer','ladoo','barfi','mithai','payasam',
+  'gulab jamun','jalebi','rasgulla','gulgule','chini paratha',
+  'malpua','modak','peda','burfi','sheera','shrikhand',
+  'chutney','pickle','achar','papad',
+  'juice','shake','smoothie','lassi','chaas','squash','sherbet',
+]
+
+function isSkipDish(name: string): boolean {
+  const n = name.toLowerCase()
+  if (SKIP_WORDS.some(w => n.includes(w))) return true
+  if ((name.match(/,/g) || []).length >= 2) return true
+  if (name.length > 55) return true
+  if (/\b(combo|recipes|recipe)\b/i.test(name)) return true
+  return false
+}
+
+// ── Filter corpus by household preferences ───────────────────────────────────
+function filterCorpus(dishes: any[], prefs: Record<string, any>): any[] {
+  const dietary      = prefs.dietary || 'No restrictions'
+  const cuisinePrefs = (prefs.cuisine_prefs || []) as string[]
+  const proteinPrefs = (prefs.protein_prefs || []) as string[]
+  const dislikeRaw   = (prefs.dislikes || '').toLowerCase()
+  const dislikeWords = dislikeRaw
+    ? dislikeRaw.replace(/;/g, ',').split(',').map((w: string) => w.trim()).filter(Boolean)
+    : []
+
+  return dishes
+    .filter(dish => {
+      const name   = dish.name || ''
+      const namel  = name.toLowerCase()
+      const cType  = dish.cuisine_type || ''
+      const pairing = dish.meal_pairing || ''
+
+      // Dietary hard filter
+      if (['Vegetarian','Vegan','Jain'].includes(dietary) && !dish.is_vegetarian) return false
+      if (dietary === 'Eggetarian' && !dish.is_vegetarian) {
+        if (!['egg','anda','omelette','bhurji'].some(w => namel.includes(w))) return false
+      }
+
+      // Dislikes (with Hindi synonym expansion)
+      if (dislikeWords.length > 0 && matchesDislikes(name, dislikeWords)) return false
+
+      // Skip unsuitable titles
+      if (isSkipDish(name)) return false
+
+      // Don't include pure snacks/street food in weekly rotation
+      if (['Snack','Street Food'].includes(cType) &&
+          ['standalone','as snack','as breakfast'].includes(pairing)) return false
+
+      return true
+    })
+    .map(dish => {
+      const namel = dish.name.toLowerCase()
+      const cType = dish.cuisine_type || ''
+      let score = 0
+
+      if (cuisinePrefs.includes(cType)) score += 3
+      else if (cType.includes('Indian') || cType === 'Indian') score += 1
+
+      if (proteinPrefs.includes('Paneer')        && namel.includes('paneer'))  score += 2
+      if (proteinPrefs.includes('Dal / Lentils') && ['dal','lentil','moong','masoor'].some(w => namel.includes(w))) score += 2
+      if (proteinPrefs.includes('Eggs')          && (namel.startsWith('egg') || namel.startsWith('anda') || [' egg ',' anda '].some(w => namel.includes(w)))) score += 2
+      if (proteinPrefs.includes('Rajma / Chole') && ['rajma','chole'].some(w => namel.includes(w))) score += 2
+      if (proteinPrefs.includes('Chicken')       && namel.includes('chicken')) score += 2
+      if (proteinPrefs.includes('Soya')          && namel.includes('soya'))    score += 2
+
+      return { ...dish, _score: score }
+    })
+}
+
+// ── Get primary ingredient for dedup ─────────────────────────────────────────
+function getPrimaryIngredient(name: string): string {
+  const n = name.toLowerCase()
+  const primaries = [
+    'paneer','rajma','chole','chana','dal','moong','masoor',
+    'egg','anda','aloo','gobi','bhindi','palak','methi',
+    'baingan','lauki','tinda','mushroom','soya','matar',
+    'poha','upma','dosa','idli','paratha','pulao','biryani','khichdi',
+    'puri','poori','sandwich','noodles','pasta','bread',
+  ]
+  for (const p of primaries) if (n.includes(p)) return p
+  return n.split(' ')[0] || n
+}
+
+// ── Category definitions ──────────────────────────────────────────────────────
+type CategoryDef = {
+  name: string
+  match: (d: any) => boolean
+  target: number
+}
+
+const MEAL_CATEGORIES: CategoryDef[] = [
+  {
+    name: 'Rice meals',
+    match: d => (
+      d.meal_pairing?.toLowerCase().includes('rice') ||
+      ['pulao','biryani','khichdi','chawal'].some(w => d.name.toLowerCase().includes(w))
+    ) && !d.tags?.includes('breakfast'),
+    target: 3,
+  },
+  {
+    name: 'Dal & legumes',
+    match: d =>
+      ['dal','rajma','chole','masoor','moong dal','chana dal'].some(w => d.name.toLowerCase().includes(w)) &&
+      !['paratha','cheela','chilla','dosa','idli'].some(w => d.name.toLowerCase().includes(w)),
+    target: 3,
+  },
+  {
+    name: 'Paneer',
+    match: d => d.name.toLowerCase().includes('paneer'),
+    target: 2,
+  },
+  {
+    name: 'Egg dishes',
+    // Word-boundary match to avoid "Eggplant" false positive
+    match: d => {
+      const n = d.name.toLowerCase()
+      return n.startsWith('egg ') || n.startsWith('egg\n') || n === 'egg' ||
+             n.startsWith('anda') || n.startsWith('ande') ||
+             [' egg ',' anda ','omelette','bhurji'].some(w => n.includes(w))
+    },
+    target: 2,
+  },
+  {
+    name: 'Veg sabzi',
+    match: d => {
+      const n = d.name.toLowerCase()
+      return ['sabzi','sabji','bhindi','gobi','palak','methi ','baingan','lauki','tinda','beans','aloo '].some(w => n.includes(w)) &&
+             !['paratha','dal','paneer'].some(w => n.includes(w))
+    },
+    target: 4,
+  },
+  {
+    name: 'Roti & paratha',
+    match: d => {
+      const n = d.name.toLowerCase()
+      return ['paratha','poori','puri'].some(w => n.includes(w)) &&
+             !n.includes('paneer')
+    },
+    target: 3,
+  },
+  {
+    name: 'Breakfast & quick',
+    match: d =>
+      d.tags?.includes('breakfast') &&
+      ['as breakfast','with Chutney'].includes(d.meal_pairing || ''),
+    target: 3,
+  },
+  {
+    name: 'Weekend special',
+    match: d => d.complexity === 'elaborate' || d.tags?.includes('festive'),
+    target: 2,
+  },
+  {
+    name: 'Misc variety',
+    match: () => true,
+    target: 2,
+  },
+]
+
+// ── Pick 24 dishes using category spread ─────────────────────────────────────
+function pickDishesFromCorpus(
+  filtered: any[],
+  n = 24,
+  excludeNames: string[] = []
+): any[] {
+  const excludeSet   = new Set(excludeNames)
+  const usedNames    = new Set<string>()
+  const usedPrimary  = new Map<string, number>()
+  const result: any[] = []
+
+  // Sort by score desc, shuffle within same score tier for variety
+  const byScore = new Map<number, any[]>()
+  for (const d of filtered) {
+    const s = d._score || 0
+    if (!byScore.has(s)) byScore.set(s, [])
+    byScore.get(s)!.push(d)
+  }
+  const ordered: any[] = []
+  for (const score of [...byScore.keys()].sort((a, b) => b - a)) {
+    const group = [...byScore.get(score)!]
+    // Fisher-Yates shuffle for consistent but varied results
+    for (let i = group.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [group[i], group[j]] = [group[j], group[i]]
+    }
+    ordered.push(...group)
+  }
+
+  const available = (catFn: (d: any) => boolean) =>
+    ordered.filter(d =>
+      catFn(d) &&
+      !usedNames.has(d.name) &&
+      !excludeSet.has(d.name)
+    )
+
+  for (const cat of MEAL_CATEGORIES) {
+    let picked = 0
+    for (const d of available(cat.match)) {
+      if (picked >= cat.target) break
+      const primary = getPrimaryIngredient(d.name)
+      // Global cap: same primary ingredient max 2 times total across all categories
+      if ((usedPrimary.get(primary) || 0) >= 2) continue
+      usedNames.add(d.name)
+      usedPrimary.set(primary, (usedPrimary.get(primary) || 0) + 1)
+      result.push({ ...d, _category: cat.name })
+      picked++
+    }
+    if (result.length >= n) break
+  }
+
+  // Fill any remaining slots
+  if (result.length < n) {
+    for (const d of ordered) {
+      if (result.length >= n) break
+      if (usedNames.has(d.name) || excludeSet.has(d.name)) continue
+      const primary = getPrimaryIngredient(d.name)
+      if ((usedPrimary.get(primary) || 0) >= 2) continue
+      result.push({ ...d, _category: 'Misc variety' })
+      usedNames.add(d.name)
+      usedPrimary.set(primary, (usedPrimary.get(primary) || 0) + 1)
+    }
+  }
+
+  return result.slice(0, n)
+}
+
+// ── Load corpus from disk ─────────────────────────────────────────────────────
 function loadCorpus(): any[] {
   try {
-    // Use fs so the path resolves correctly in Vercel's runtime environment
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const fs = require('fs')
+    const fs   = require('fs')
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const path = require('path')
     const corpusPath = path.join(process.cwd(), 'lib', 'dishes-corpus.json')
     if (!fs.existsSync(corpusPath)) return []
-    const raw = fs.readFileSync(corpusPath, 'utf-8')
-    const parsed = JSON.parse(raw)
+    const parsed = JSON.parse(fs.readFileSync(corpusPath, 'utf-8'))
     return parsed.dishes || []
   } catch { return [] }
 }
 
-async function selectFromCorpus(corpus: any[], householdContext: string): Promise<any[]> {
-  if (corpus.length === 0) return []
-
-  // Build a summary of the corpus for Gemini to select from
-  // Send dish names + cuisine + complexity — Gemini picks 24 that match preferences
-  const corpusSummary = corpus
-    .map((d: any, i: number) => `${i+1}. ${d.name} (${d.cuisine_type || 'Indian'}, ${d.complexity || 'moderate'}, ${d.is_vegetarian ? 'veg' : 'non-veg'})`)
-    .join('\n')
-    .slice(0, 8000) // stay within token limits
-
-  const prompt = `You are selecting dishes from a pre-verified corpus for an Indian household's weekly meal plan.
-${householdContext}
-
-From the dishes listed below, select exactly 24 that best match this household's preferences.
-Rules:
-- Pick diverse dishes across: rice meals, roti/paratha meals, breakfast/snack, legume-based, paneer, vegetables, eggs (if allowed), weekend specials
-- No two dishes with the same primary defining ingredient
-- Max 2 paneer dishes
-- Respect dietary preference strictly
-
-Return ONLY a JSON array of the dish names you selected (exactly as written), no markdown:
-["Dal Tadka", "Poha", ...]
-
-Corpus:
-${corpusSummary}`
-
-  try {
-    const raw = await callGeminiRaw(prompt)
-    const selected: string[] = JSON.parse(cleanJson(raw))
-    if (!Array.isArray(selected)) return []
-
-    // Map selected names back to full corpus objects
-    const corpusMap = new Map(corpus.map((d: any) => [d.name.toLowerCase().trim(), d]))
-    const result = selected
-      .map((name: string) => corpusMap.get(name.toLowerCase().trim()))
-      .filter(Boolean)
-      .slice(0, 24)
-
-    // Convert corpus format to onboarding format (add empty ingredients for now)
-    return result.map((d: any) => ({
-      name: d.name,
-      description: d.description || '',
-      meal_pairing: d.meal_pairing || '',
-      cuisine_type: d.cuisine_type || 'Indian',
-      complexity: d.complexity || 'moderate',
-      cooking_time_mins: d.cooking_time_mins || null,
-      is_vegetarian: d.is_vegetarian !== false,
-      tags: d.tags || [],
-      youtube_url: d.youtube_url || '',
-      // Ingredients will still be empty from corpus — user can fill in later
-      // or we generate them in a separate call
-      ingredients: [],
-    }))
-  } catch { return [] }
+// ── Corpus-based dish search for Discover feature ────────────────────────────
+const DISCOVER_MOOD_MAP: Record<string, string[]> = {
+  light:     ['low-oil','healthy'],
+  healthy:   ['healthy','low-oil'],
+  quick:     ['quick'],
+  fast:      ['quick'],
+  comfort:   ['comfort'],
+  hearty:    ['comfort'],
+  heavy:     ['comfort'],
+  spicy:     ['spicy'],
+  breakfast: ['breakfast'],
+  snack:     ['snack'],
+  festive:   ['festive'],
+  protein:   ['high-protein'],
+  'one pot': ['one-pot'],
+  kid:       ['kid-friendly'],
 }
 
+const DISCOVER_CUISINE_MAP: Record<string, string> = {
+  maharashtrian: 'Maharashtrian',
+  'south indian': 'South Indian',
+  'south-indian': 'South Indian',
+  'north indian': 'North Indian',
+  bengali: 'Bengali',
+  gujarati: 'Gujarati',
+  punjabi: 'Punjabi',
+  rajasthani: 'Rajasthani',
+  goan: 'Goan',
+  chinese: 'Chinese',
+  continental: 'Continental',
+}
+
+const DISCOVER_INGREDIENT_SYNONYMS: Record<string, string[]> = {
+  egg:      ['egg','anda'],
+  eggs:     ['egg','anda'],
+  paneer:   ['paneer'],
+  dal:      ['dal','lentil','daal'],
+  rice:     ['rice','chawal','pulao','biryani','khichdi'],
+  potato:   ['potato','aloo'],
+  spinach:  ['spinach','palak'],
+  chicken:  ['chicken'],
+  mushroom: ['mushroom'],
+  tofu:     ['tofu','soya'],
+  onion:    ['onion','pyaaz','kanda'],
+  garlic:   ['garlic','lahsun','lasun'],
+  tomato:   ['tomato','tamatar'],
+  gourd:    ['lauki','tinda','turai','karela'],
+}
+
+const DISCOVER_STOP_WORDS = new Set([
+  'something','some','with','and','or','a','an','the','for','of','in',
+  'make','cook','want','need','give','me','today','now','please',
+  'good','nice','tasty','delicious','easy','simple','style','type',
+  'kind','sort','using','use','up','any','indian','no','without',
+  'avoid','not','dont',"don't",'except',
+])
+
+export function searchCorpusForDiscover(
+  query: string,
+  prefs: Record<string, any>,
+  pantryItems: string[] = [],
+  n = 12
+): any[] {
+  const corpus = loadCorpus()
+  if (!corpus.length) return []
+
+  const queryL     = query.toLowerCase().trim()
+  const queryWords = new Set(queryL.match(/\w+/g) || [])
+
+  // Detect negation — words after "no", "without", "avoid" are exclusions
+  const negationWords = new Set<string>()
+  const negationTriggers = ['no ','without ','avoid ','not ']
+  for (const trigger of negationTriggers) {
+    const idx = queryL.indexOf(trigger)
+    if (idx >= 0) {
+      const afterTrigger = queryL.slice(idx + trigger.length).match(/\w+/g) || []
+      for (const w of afterTrigger) negationWords.add(w)
+    }
+  }
+
+  // Detect cuisine intent
+  let targetCuisine: string | null = null
+  for (const [kw, cuisine] of Object.entries(DISCOVER_CUISINE_MAP)) {
+    if (queryL.includes(kw)) { targetCuisine = cuisine; break }
+  }
+
+  // Detect mood → tags
+  const targetTags = new Set<string>()
+  for (const [word, tags] of Object.entries(DISCOVER_MOOD_MAP)) {
+    if (queryL.includes(word)) tags.forEach(t => targetTags.add(t))
+  }
+
+  // Ingredient intent with synonym expansion
+  const cuisineKws = new Set(Object.keys(DISCOVER_CUISINE_MAP).join(' ').split(' '))
+  const moodKws    = new Set(Object.keys(DISCOVER_MOOD_MAP))
+  const rawIngredients = [...queryWords].filter(w =>
+    !DISCOVER_STOP_WORDS.has(w) && !cuisineKws.has(w) && !moodKws.has(w)
+  )
+  const searchTerms = new Set<string>()
+  for (const w of rawIngredients) {
+    const syns = DISCOVER_INGREDIENT_SYNONYMS[w] || [w]
+    syns.forEach(s => searchTerms.add(s))
+  }
+
+  // Also expand negation words with synonyms
+  const negationExpanded = new Set<string>()
+  for (const w of negationWords) {
+    const syns = DISCOVER_INGREDIENT_SYNONYMS[w] || [w]
+    syns.forEach(s => negationExpanded.add(s))
+  }
+
+  const pantrySet = new Set(pantryItems.map(p => p.toLowerCase()))
+  const dietary   = prefs.dietary || ''
+
+  const scored: [number, any][] = []
+
+  for (const dish of corpus) {
+    if (isSkipDish(dish.name)) continue
+    if (['Vegetarian','Vegan','Jain'].includes(dietary) && !dish.is_vegetarian) continue
+
+    const namel  = dish.name.toLowerCase()
+    const tags   = new Set(dish.tags || [])
+    const cType  = dish.cuisine_type || ''
+    const pairing = dish.meal_pairing || ''
+    let score = 0
+
+    // Hard exclude if dish contains a negated ingredient
+    if ([...negationExpanded].some(w => namel.includes(w))) continue
+
+    // Cuisine match — strong signal
+    if (targetCuisine && cType === targetCuisine) score += 8
+    else if (targetCuisine && cType.includes('Indian')) score += 1
+
+    // Ingredient/keyword match
+    for (const term of searchTerms) if (namel.includes(term)) score += 4
+
+    // Tag match
+    for (const tag of targetTags) if (tags.has(tag)) score += 3
+
+    // Pantry overlap
+    for (const item of pantrySet) if (namel.includes(item)) score += 1
+
+    // Deprioritise pure standalone snacks unless explicitly asked
+    if (['Snack','Street Food'].includes(cType) &&
+        !queryL.includes('snack') && !queryL.includes('breakfast')) {
+      if (['standalone','as snack'].includes(pairing)) score = Math.max(0, score - 3)
+    }
+
+    if (score > 0) scored.push([score, dish])
+  }
+
+  scored.sort((a, b) => b[0] - a[0])
+  return scored.slice(0, n).map(([, d]) => d)
+}
+
+// ── Main starter dishes function ──────────────────────────────────────────────
 export async function getStarterDishes(context: {
   householdContext: string
-}): Promise<{
-  name: string; description: string; meal_pairing: string
-  cuisine_type: string; complexity: string; cooking_time_mins: number
-  is_vegetarian: boolean; tags: string[]
-  ingredients: { name: string; category: string; tier: string; depletion_days: number }[]
-}[]> {
-  const prompt = `You are building a weekly meal rotation for an Indian household.
-${context.householdContext}
-
-Generate exactly 24 DISTINCT dishes for their weekly rotation.
-
-STRICT RULES:
-1. Every dish must have a UNIQUE name — no duplicates, no near-duplicates
-2. No two dishes can share the same primary defining ingredient (e.g. don't suggest both "Dal Tadka" AND "Dal Fry" — pick ONE dal dish; not both "Aloo Sabzi" AND "Aloo Methi")
-3. Spread across 8 categories (~3 dishes each):
-   - Everyday rice meals (dal chawal, khichdi, etc.)
-   - Everyday roti/paratha meals
-   - Quick breakfast/snack dishes (poha, upma, cheela, eggs)
-   - Legume-based (chole, rajma — pick DIFFERENT legumes)
-   - Paneer dishes (max 2 total)
-   - Egg dishes (only if dietary allows)
-   - Vegetable sabzis (DIFFERENT vegetables each)
-   - Weekend/special dishes
-4. meal_pairing: what this dish is typically served with (e.g. "with Steamed Rice", "with Roti", standalone)
-5. complexity: "quick" (<20 min), "moderate" (20-40 min), "elaborate" (>40 min)
-6. tags: 1-3 from: ["high-protein","low-oil","one-pot","kid-friendly","monsoon","summer","festive","quick","comfort"]
-7. ingredients: list ONLY 3-4 KEY items to buy — specific grocery items a person actually buys (NOT "mixed vegetables", NOT "oil", NOT any spice). Each ingredient MUST have category, tier, and depletion_days:
-   - category: "Vegetables" | "Leafy Greens" | "Dairy" | "Eggs" | "Grains & Lentils" | "Bakery" | "Condiments" | "Packaged"
-   - tier: "fresh" | "weekly" | "staple"
-   - depletion_days: integer (fresh: 3-7, weekly: 7-21, staple: 21-60)
-
-Return ONLY a valid JSON array, no markdown:
-[
-  {
-    "name": "Dal Tadka",
-    "description": "Smoky tempered lentils — the weekday anchor",
-    "meal_pairing": "with Steamed Rice and Papad",
-    "cuisine_type": "North Indian",
-    "complexity": "moderate",
-    "cooking_time_mins": 30,
-    "is_vegetarian": true,
-    "tags": ["comfort", "high-protein"],
-    "ingredients": [
-      {"name": "Toor Dal", "category": "Grains & Lentils", "tier": "staple", "depletion_days": 30},
-      {"name": "Tomato", "category": "Vegetables", "tier": "fresh", "depletion_days": 5}
-    ]
-  }
-]`
-  // Try corpus first
+  prefs?: Record<string, any>
+}): Promise<any[]> {
   const corpus = loadCorpus()
-  if (corpus.length > 50) {
-    console.log(`[getStarterDishes] Using corpus (${corpus.length} dishes)`)
-    const corpusResult = await selectFromCorpus(corpus, context.householdContext)
-    if (corpusResult.length >= 12) return corpusResult
-    console.log('[getStarterDishes] Corpus selection too small, falling back to generation')
+
+  if (corpus.length > 50 && context.prefs) {
+    // Path 1: corpus exists — pure deterministic selection, no Gemini for picking
+    const filtered = filterCorpus(corpus, context.prefs)
+    const selected = pickDishesFromCorpus(filtered, 24)
+
+    if (selected.length >= 12) {
+      // Single Gemini call: just write descriptions for the selected dishes
+      const dishList = selected.map((d: any) => d.name).join('\n')
+      const descPrompt = `Write a one-sentence appetising description for each Indian dish listed.
+Each description should be 8-12 words, evocative, and sound like something you'd read on a menu.
+Do NOT start with the dish name. Focus on texture, flavour, or occasion.
+
+Dishes:
+${dishList}
+
+Return ONLY a JSON object mapping dish name to description, no markdown:
+{"Dal Khichdi": "Soft comfort in a bowl — rice and lentils simmered to perfection."}`
+
+      let descriptions: Record<string, string> = {}
+      try {
+        const raw = await callGeminiRaw(descPrompt)
+        descriptions = JSON.parse(cleanJson(raw))
+      } catch { /* descriptions stay empty, fine */ }
+
+      return selected.map((d: any) => ({
+        name:              d.name,
+        description:       descriptions[d.name] || '',
+        meal_pairing:      d.meal_pairing || '',
+        cuisine_type:      d.cuisine_type || 'Indian',
+        complexity:        d.complexity || 'moderate',
+        cooking_time_mins: null,
+        is_vegetarian:     d.is_vegetarian !== false,
+        tags:              d.tags || [],
+        youtube_url:       d.youtube_url || '',
+        ingredients:       [],
+        _category:         d._category || '',
+      }))
+    }
   }
 
-  // Fall back to Gemini generation
-  try {
-    const raw = await callGeminiLarge(prompt)
-    const dishes = JSON.parse(cleanJson(raw))
-    if (!Array.isArray(dishes)) return []
-    const seen = new Set<string>()
-    return dishes.filter((d: any) => {
-      if (!d.name) return false
-      const norm = d.name.toLowerCase().replace(/[^a-z0-9]/g, '')
-      if (seen.has(norm)) return false
-      seen.add(norm)
-      return true
-    }).slice(0, 24)
-  } catch { return [] }
+  // Path 2: no corpus — return empty so onboarding shows the "no corpus" state
+  // (avoids showing hallucinated dishes when corpus isn't available)
+  return []
 }
+
+// ── Single dish regeneration from corpus ─────────────────────────────────────
+export function getReplacementDish(
+  excludeNames: string[],
+  prefs: Record<string, any>,
+  categoryHint?: string
+): any | null {
+  const corpus   = loadCorpus()
+  if (!corpus.length) return null
+
+  const filtered = filterCorpus(corpus, prefs)
+  const excludeSet = new Set(excludeNames)
+
+  const catDef = categoryHint
+    ? MEAL_CATEGORIES.find(c => c.name === categoryHint)
+    : null
+
+  const candidates = filtered
+    .filter(d => !excludeSet.has(d.name) && (catDef ? catDef.match(d) : true))
+    .sort((a, b) => (b._score || 0) - (a._score || 0))
+
+  if (!candidates.length) return null
+
+  // Pick randomly from top 10 to give variety on multiple regenerates
+  const pool = candidates.slice(0, Math.min(10, candidates.length))
+  return pool[Math.floor(Math.random() * pool.length)] || null
+}
+
 export async function getMealSuggestion(context: {
   today: string
   lunchOptions: string[]

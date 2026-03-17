@@ -194,8 +194,10 @@ export default function OnboardingPage() {
         setSelectedDishes(new Set(d.dishes.map((x: any) => x.name)))
         // Seed the seen names set
         d.dishes.forEach((x: any) => seenDishNames.current.add(x.name))
+      } else if (d.no_corpus) {
+        setStarterError('Recipe library not yet available. You can skip this step and add dishes manually from the Meals page.')
       } else {
-        setStarterError('Could not generate suggestions. Try again or skip.')
+        setStarterError('Could not load suggestions. Try again or skip.')
       }
       setStarterLoading(false)
     }).catch(() => { setStarterError('Network error — try again or skip.'); setStarterLoading(false) })
@@ -209,9 +211,10 @@ export default function OnboardingPage() {
     setRegeneratingDish(oldName)
     // Use the full accumulated seen set so we never re-suggest a previously shown dish
     const excludeNames = [...seenDishNames.current]
+    const categoryHint = starterDishes.find((d: any) => d.name === oldName)?._category || ''
     const res = await fetch('/api/onboarding/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ exclude_names: excludeNames })
+      body: JSON.stringify({ exclude_names: excludeNames, category_hint: categoryHint })
     })
     const d = await res.json()
     if (d.dish) {
