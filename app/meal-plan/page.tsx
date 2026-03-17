@@ -214,6 +214,91 @@ function LockSheet({ slot, label, dayName, date, allSlots, locks, onLock, onClos
   )
 }
 
+
+// ── Dish edit sheet ───────────────────────────────────────────────────────────
+function DishEditSheet({ dish, onSave, onClose }: {
+  dish: any
+  onSave: (updated: any) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState(dish.name || '')
+  const [pairing, setPairing] = useState(dish.meal_pairing || '')
+  const [ytUrl, setYtUrl] = useState(dish.youtube_url || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function save() {
+    if (!name.trim()) { setError('Dish name required'); return }
+    setSaving(true)
+    const res = await fetch('/api/dishes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: dish.id, name: name.trim(), meal_pairing: pairing.trim(), youtube_url: ytUrl.trim() })
+    })
+    const d = await res.json()
+    if (d.error) { setError(d.error); setSaving(false); return }
+    onSave(d)
+    setSaving(false)
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 430, margin: '0 auto',
+        background: 'white', borderRadius: '24px 24px 0 0',
+        padding: '20px 20px 40px',
+      }}>
+        <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 18px' }} />
+        <p className="font-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 18 }}>Edit dish</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Dish name</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 15, outline: 'none', fontFamily: 'inherit' }} />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Meal pairing</label>
+            <input value={pairing} onChange={e => setPairing(e.target.value)}
+              placeholder="e.g. with Steamed Rice, with Roti, standalone"
+              style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>
+              YouTube recipe link
+              <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--green-mid)' }}>(optional)</span>
+            </label>
+            <input value={ytUrl} onChange={e => setYtUrl(e.target.value)}
+              placeholder="https://youtube.com/watch?v=..."
+              style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
+            {ytUrl && (
+              <a href={ytUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 600, display: 'inline-block', marginTop: 6 }}>
+                ▶ Open in browser →
+              </a>
+            )}
+          </div>
+        </div>
+
+        {error && <p style={{ fontSize: 13, color: 'var(--red)', marginTop: 10 }}>{error}</p>}
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+          <button onClick={save} disabled={saving} style={{
+            flex: 1, padding: '13px', borderRadius: 12, border: 'none',
+            background: saving ? 'var(--green-soft)' : 'var(--green-mid)',
+            color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer'
+          }}>{saving ? 'Saving...' : 'Save changes'}</button>
+          <button onClick={onClose} style={{
+            padding: '13px 16px', borderRadius: 12, border: '1px solid var(--border)',
+            background: 'white', fontSize: 14, cursor: 'pointer', color: 'var(--text-muted)'
+          }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MealPlanPage() {
   const [slots, setSlots] = useState<any[]>([])
@@ -226,6 +311,7 @@ export default function MealPlanPage() {
   const [parsing, setParsing] = useState(false)
   const [parsedIngredients, setParsedIngredients] = useState<string[]>([])
   const [lockSheet, setLockSheet] = useState<{ slot: string; label: string }|null>(null)
+  const [editingDish, setEditingDish] = useState<any>(null)
   const todayName = getTodayDayName()
 
   useEffect(() => {
@@ -287,6 +373,12 @@ export default function MealPlanPage() {
     const d = await res.json()
     if (!d.error) setSlots(p => [...p, d])
     setNewDish(''); setParsedIngredients([]); setAdding(null); setSaving(false)
+  }
+
+  function handleDishSaved(updated: any) {
+    // Update all slots that reference this dish
+    setSlots(p => p.map(s => s.dish?.id === updated.id ? { ...s, dish: { ...s.dish, ...updated } } : s))
+    setEditingDish(null)
   }
 
   async function removeSlot(id: string) {
@@ -418,7 +510,17 @@ export default function MealPlanPage() {
                               </div>
                             )}
                           </div>
-                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                            {s.dish?.youtube_url && (
+                              <a href={s.dish.youtube_url} target="_blank" rel="noopener noreferrer" style={{
+                                padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)',
+                                background: 'white', fontSize: 13, textDecoration: 'none', lineHeight: 1
+                              }} title="Watch recipe">▶</a>
+                            )}
+                            <button onClick={() => setEditingDish(s.dish)} style={{
+                              padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)',
+                              background: 'white', fontSize: 12, cursor: 'pointer', color: 'var(--text-muted)'
+                            }} title="Edit dish">✎</button>
                             {!lock && (
                               <button onClick={() => lockMeal(key, s.dish?.name, s.dish?.id)} style={{
                                 padding: '5px 10px', borderRadius: 8, border: 'none',
@@ -478,6 +580,15 @@ export default function MealPlanPage() {
           )
         })}
       </div>
+
+      {/* Dish edit sheet */}
+      {editingDish && (
+        <DishEditSheet
+          dish={editingDish}
+          onSave={handleDishSaved}
+          onClose={() => setEditingDish(null)}
+        />
+      )}
 
       {/* Lock sheet */}
       {lockSheet && (

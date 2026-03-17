@@ -36,6 +36,9 @@ function DiscoverContent() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [prompt, setPrompt] = useState(searchParams.get('prompt') || '')
+  const lockSlot = searchParams.get('lockSlot') || null      // 'lunch' | 'dinner' | null
+  const lockDate = searchParams.get('lockDate') || null      // 'YYYY-MM-DD' | null
+  const isLockMode = !!(lockSlot && lockDate)
   const [dishes, setDishes] = useState<Dish[]>([])
   const [loading, setLoading] = useState(false)
   const [generated, setGenerated] = useState(false)
@@ -50,12 +53,15 @@ function DiscoverContent() {
   const [pickingDay, setPickingDay] = useState<string|null>(null)
   const [saving, setSaving] = useState(false)
 
-  // Auto-generate if we arrived from mood chip
+  // Auto-generate if we arrived from mood chip or lock sheet
   useEffect(() => {
     const urlPrompt = searchParams.get('prompt')
     if (urlPrompt) {
       setPrompt(urlPrompt)
       handleGenerate(urlPrompt)
+    } else if (isLockMode) {
+      // Arrived from lock sheet — auto-generate with pantry context
+      handleGenerate('')
     }
   }, [])
 
@@ -132,7 +138,9 @@ function DiscoverContent() {
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Kitchen Discovery</p>
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Discover</h1>
-          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>Tell it what you're craving</p>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>
+            {isLockMode ? `Locking ${lockSlot} — tap a dish to confirm` : "Tell it what you're craving"}
+          </p>
         </div>
       </div>
 
@@ -267,7 +275,33 @@ function DiscoverContent() {
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '4px 0' }}>Marked as disliked · won't suggest again</p>
                 ) : (
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {addedT || addedM ? (
+                    {isLockMode ? (
+                      // Lock mode — one-tap lock directly from discover
+                      addedT ? (
+                        <div style={{ flex: 1, padding: '9px', borderRadius: 10, background: 'var(--green-pale)', border: '1px solid var(--green-light)', textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--green-deep)' }}>
+                          🔒 Locked for {lockSlot}
+                        </div>
+                      ) : (
+                        <button onClick={async () => {
+                          // Lock it immediately and go back to meal plan
+                          await fetch('/api/locks', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lock_date: lockDate, slot: lockSlot, dish_name: dish.name })
+                          })
+                          setAddedToday(p => new Set([...p, dish.name]))
+                          // Also add to meal plan for the correct day
+                          const dayName = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date(lockDate + 'T12:00:00').getDay()]
+                          await fetch('/api/meal-plan', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ day: dayName, slot: lockSlot, dish_name: dish.name, ingredients: dish.usesFromPantry })
+                          })
+                          setTimeout(() => router.push('/meal-plan'), 800)
+                        }} style={{
+                          flex: 1, padding: '9px', borderRadius: 10, border: 'none',
+                          background: 'var(--green-mid)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer'
+                        }}>🔒 Lock for {lockSlot}</button>
+                      )
+                    ) : addedT || addedM ? (
                       <div style={{ flex: 1, padding: '9px', borderRadius: 10, background: 'var(--green-pale)', border: '1px solid var(--green-light)', textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--green-deep)' }}>
                         ✓ Added to {addedT ? "today's plan" : 'meal plan'}
                       </div>
