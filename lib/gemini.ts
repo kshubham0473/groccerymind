@@ -29,6 +29,29 @@ export function cleanJson(raw: string): string {
   return raw.replace(/^```json\s*|^```\s*|```\s*$/gm, '').trim()
 }
 
+// Large output variant — for prompts that return big JSON structures (24 dishes etc.)
+export async function callGeminiLarge(prompt: string): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set')
+
+  const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 8192 }
+    })
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Gemini ${res.status}: ${err.slice(0, 200)}`)
+  }
+
+  const data = await res.json()
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+}
+
 // ── Build a rich household context string injected into every prompt ──────────
 export function buildHouseholdContext(
   prefs: Record<string, any>,
@@ -127,6 +150,81 @@ If the user's request is not food-related, return: [{"error": "Please describe a
 }
 
 // ── Onboarding: generate starter dish shortlist ───────────────────────────────
+// ── Corpus-aware dish selection ───────────────────────────────────────────────
+// When lib/dishes-corpus.json exists (after running the YouTube scraper),
+// we select from real curated dishes instead of generating from scratch.
+// Falls back to Gemini generation if the corpus doesn't exist or is empty.
+function loadCorpus(): any[] {
+  try {
+    // Use fs so the path resolves correctly in Vercel's runtime environment
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require('fs')
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require('path')
+    const corpusPath = path.join(process.cwd(), 'lib', 'dishes-corpus.json')
+    if (!fs.existsSync(corpusPath)) return []
+    const raw = fs.readFileSync(corpusPath, 'utf-8')
+    const parsed = JSON.parse(raw)
+    return parsed.dishes || []
+  } catch { return [] }
+}
+
+async function selectFromCorpus(corpus: any[], householdContext: string): Promise<any[]> {
+  if (corpus.length === 0) return []
+
+  // Build a summary of the corpus for Gemini to select from
+  // Send dish names + cuisine + complexity — Gemini picks 24 that match preferences
+  const corpusSummary = corpus
+    .map((d: any, i: number) => `${i+1}. ${d.name} (${d.cuisine_type || 'Indian'}, ${d.complexity || 'moderate'}, ${d.is_vegetarian ? 'veg' : 'non-veg'})`)
+    .join('\n')
+    .slice(0, 8000) // stay within token limits
+
+  const prompt = `You are selecting dishes from a pre-verified corpus for an Indian household's weekly meal plan.
+${householdContext}
+
+From the dishes listed below, select exactly 24 that best match this household's preferences.
+Rules:
+- Pick diverse dishes across: rice meals, roti/paratha meals, breakfast/snack, legume-based, paneer, vegetables, eggs (if allowed), weekend specials
+- No two dishes with the same primary defining ingredient
+- Max 2 paneer dishes
+- Respect dietary preference strictly
+
+Return ONLY a JSON array of the dish names you selected (exactly as written), no markdown:
+["Dal Tadka", "Poha", ...]
+
+Corpus:
+${corpusSummary}`
+
+  try {
+    const raw = await callGeminiRaw(prompt)
+    const selected: string[] = JSON.parse(cleanJson(raw))
+    if (!Array.isArray(selected)) return []
+
+    // Map selected names back to full corpus objects
+    const corpusMap = new Map(corpus.map((d: any) => [d.name.toLowerCase().trim(), d]))
+    const result = selected
+      .map((name: string) => corpusMap.get(name.toLowerCase().trim()))
+      .filter(Boolean)
+      .slice(0, 24)
+
+    // Convert corpus format to onboarding format (add empty ingredients for now)
+    return result.map((d: any) => ({
+      name: d.name,
+      description: d.description || '',
+      meal_pairing: d.meal_pairing || '',
+      cuisine_type: d.cuisine_type || 'Indian',
+      complexity: d.complexity || 'moderate',
+      cooking_time_mins: d.cooking_time_mins || null,
+      is_vegetarian: d.is_vegetarian !== false,
+      tags: d.tags || [],
+      youtube_url: d.youtube_url || '',
+      // Ingredients will still be empty from corpus — user can fill in later
+      // or we generate them in a separate call
+      ingredients: [],
+    }))
+  } catch { return [] }
+}
+
 export async function getStarterDishes(context: {
   householdContext: string
 }): Promise<{
@@ -155,10 +253,10 @@ STRICT RULES:
 4. meal_pairing: what this dish is typically served with (e.g. "with Steamed Rice", "with Roti", standalone)
 5. complexity: "quick" (<20 min), "moderate" (20-40 min), "elaborate" (>40 min)
 6. tags: 1-3 from: ["high-protein","low-oil","one-pot","kid-friendly","monsoon","summer","festive","quick","comfort"]
-7. ingredients: list ONLY items to buy — specific grocery items (NOT "mixed vegetables", NOT "oil", NOT "spices/masala"). Each ingredient MUST have category, tier, and depletion_days:
+7. ingredients: list ONLY 3-4 KEY items to buy — specific grocery items a person actually buys (NOT "mixed vegetables", NOT "oil", NOT any spice). Each ingredient MUST have category, tier, and depletion_days:
    - category: "Vegetables" | "Leafy Greens" | "Dairy" | "Eggs" | "Grains & Lentils" | "Bakery" | "Condiments" | "Packaged"
-   - tier: "fresh" (spoils in days) | "weekly" (1-2 weeks) | "staple" (months)
-   - depletion_days: realistic number (fresh veggies: 4-7, dairy: 3-5, staples: 21-60)
+   - tier: "fresh" | "weekly" | "staple"
+   - depletion_days: integer (fresh: 3-7, weekly: 7-21, staple: 21-60)
 
 Return ONLY a valid JSON array, no markdown:
 [
@@ -173,16 +271,24 @@ Return ONLY a valid JSON array, no markdown:
     "tags": ["comfort", "high-protein"],
     "ingredients": [
       {"name": "Toor Dal", "category": "Grains & Lentils", "tier": "staple", "depletion_days": 30},
-      {"name": "Onion", "category": "Vegetables", "tier": "fresh", "depletion_days": 7},
       {"name": "Tomato", "category": "Vegetables", "tier": "fresh", "depletion_days": 5}
     ]
   }
 ]`
+  // Try corpus first
+  const corpus = loadCorpus()
+  if (corpus.length > 50) {
+    console.log(`[getStarterDishes] Using corpus (${corpus.length} dishes)`)
+    const corpusResult = await selectFromCorpus(corpus, context.householdContext)
+    if (corpusResult.length >= 12) return corpusResult
+    console.log('[getStarterDishes] Corpus selection too small, falling back to generation')
+  }
+
+  // Fall back to Gemini generation
   try {
-    const raw = await callGeminiRaw(prompt)
+    const raw = await callGeminiLarge(prompt)
     const dishes = JSON.parse(cleanJson(raw))
     if (!Array.isArray(dishes)) return []
-    // Client-side dedup by normalised name
     const seen = new Set<string>()
     return dishes.filter((d: any) => {
       if (!d.name) return false
