@@ -451,7 +451,7 @@ export default function MealPlanPage() {
                     display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px',
                     borderRadius: 99, border: 'none', background: 'var(--green-mid)', color: 'white',
                     fontSize: 12, fontWeight: 700, cursor: 'pointer'
-                  }}>🔒 Lock</button>
+                  }}>Choose →</button>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-deep)' }}>

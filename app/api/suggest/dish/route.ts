@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
-import { searchCorpusForDiscover, buildHouseholdContext, callGeminiRaw, cleanJson } from '@/lib/gemini'
+import { searchCorpusForDiscover, buildHouseholdContext, buildLearningContext, callGeminiRaw, cleanJson } from '@/lib/gemini'
 
 export const maxDuration = 60
 
@@ -9,19 +9,50 @@ export async function GET(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const userPrompt = new URL(req.url).searchParams.get('prompt') || ''
+  const url        = new URL(req.url)
+  const userPrompt = url.searchParams.get('prompt') || ''
+  const pantryOnly = url.searchParams.get('pantry_only') === '1'
   const supabase   = createServiceClient()
 
-  const [pantryRes, prefsRes, feedbackRes] = await Promise.all([
+  // Fetch all data in parallel — including behaviour_log for learning signals
+  const [pantryRes, prefsRes, feedbackRes, cookedRes, lockedRes] = await Promise.all([
     supabase.from('pantry_items').select('name').eq('household_id', user.household_id).eq('stock_status', 'good'),
     supabase.from('households').select('preferences').eq('id', user.household_id).single(),
-    supabase.from('dish_feedback').select('dish_name, signal').eq('household_id', user.household_id),
+    supabase.from('dish_feedback').select('dish_name, signal, reason').eq('household_id', user.household_id),
+    // Cooked events from last 14 days
+    supabase.from('behaviour_log')
+      .select('metadata')
+      .eq('household_id', user.household_id)
+      .eq('event_type', 'cooked')
+      .gte('created_at', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(20),
+    // Lock events from last 30 days for slot/day preference learning
+    supabase.from('behaviour_log')
+      .select('metadata')
+      .eq('household_id', user.household_id)
+      .eq('event_type', 'meal_locked')
+      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(60),
   ])
 
   const pantryItems       = pantryRes.data?.map((p: any) => p.name) || []
   const prefs             = prefsRes.data?.preferences || {}
   const feedback          = feedbackRes.data || []
   const dislikedDishNames = feedback.filter((f: any) => f.signal === 'dislike').map((f: any) => f.dish_name).filter(Boolean)
+
+  // Build learning signals from behaviour_log
+  const recentlyCooked = (cookedRes.data || [])
+    .map((r: any) => r.metadata?.dish_name)
+    .filter(Boolean) as string[]
+
+  const lockedPatterns = (lockedRes.data || [])
+    .map((r: any) => {
+      if (!r.metadata?.dish_name || !r.metadata?.lock_date || !r.metadata?.slot) return null
+      const dow = new Date(r.metadata.lock_date).getDay()
+      return { slot: r.metadata.slot, dish_name: r.metadata.dish_name, day_of_week: dow }
+    })
+    .filter(Boolean) as { slot: string; dish_name: string; day_of_week: number }[]
 
   // Log prompt for behaviour learning
   if (userPrompt) {
@@ -33,23 +64,32 @@ export async function GET(req: NextRequest) {
     } catch (_) {}
   }
 
-  // Step 1: Semantic search in corpus
-  const candidates = await searchCorpusForDiscover(userPrompt, prefs, dislikedDishNames, pantryItems, 15)
+  // Step 1: Semantic search in corpus (with optional pantry-only filter)
+  const candidates = await searchCorpusForDiscover(userPrompt, prefs, dislikedDishNames, pantryItems, 15, pantryOnly)
   if (!candidates.length) {
-    return NextResponse.json({ dishes: [], message: 'No matching dishes found. Try a different description.' })
+    return NextResponse.json({ dishes: [], message: pantryOnly
+      ? 'Not enough pantry matches found. Try turning off pantry filter.'
+      : 'No matching dishes found. Try a different description.'
+    })
   }
 
-  // Step 2: Gemini ranks top 3 and writes descriptions — cannot invent dishes
+  // Step 2: Gemini ranks top 3 — injecting both household prefs AND learned patterns
   const householdContext = buildHouseholdContext(prefs, feedback)
+  const learningContext  = buildLearningContext(feedback, recentlyCooked, lockedPatterns)
   const candidateList    = candidates.map((d: any, i: number) =>
     `${i+1}. ${d.name} (${d.cuisine_type || 'Indian'}, ${d.complexity || 'moderate'}, pairing: ${d.meal_pairing || 'varies'})`
   ).join('\n')
 
   const rankPrompt = `You are helping an Indian household decide what to cook.
 ${householdContext}
+${learningContext}
 ${userPrompt ? `They are looking for: "${userPrompt}"` : 'They want general meal suggestions.'}
 
-From the dishes below, pick the 3 best matches. For each, write one appetising sentence (8-12 words).
+From the dishes below, pick the 3 best matches. Prioritise:
+- Dishes not cooked recently
+- Dishes matching their slot preferences (lunch/dinner patterns)
+- Dishes they've enjoyed before
+For each, write one appetising sentence (8-12 words).
 You MUST ONLY use dishes from this list — do not suggest any other dish.
 
 Candidates:
@@ -64,15 +104,19 @@ Return ONLY a JSON array of exactly 3, no markdown:
     if (!Array.isArray(ranked)) throw new Error('not array')
 
     const candidateMap = new Map(candidates.map((d: any) => [d.name.toLowerCase(), d]))
+    const pantrySet    = new Set(pantryItems.map(p => p.toLowerCase()))
+
     const dishes = ranked.slice(0, 3)
       .map((r: any) => {
         const match = candidateMap.get((r.name || '').toLowerCase())
         if (!match) return null
+        // Compute what's in pantry vs what needs ordering for this dish
+        const usesFromPantry = pantryItems.filter(p => match.name.toLowerCase().includes(p.toLowerCase()))
         return {
           name:           match.name,
           description:    r.description || '',
-          usesFromPantry: pantryItems.filter((p: string) => match.name.toLowerCase().includes(p.toLowerCase())),
-          needsToBuy:     [],
+          usesFromPantry,
+          needsToBuy:     [],   // populated by suggest/ingredients if user taps the card
           prepTime:       match.complexity === 'quick' ? '< 20 mins' : match.complexity === 'elaborate' ? '45+ mins' : '25–35 mins',
           mood:           match.tags?.includes('healthy') ? 'healthy'
                         : match.tags?.includes('comfort') ? 'hearty'

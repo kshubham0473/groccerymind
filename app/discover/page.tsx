@@ -14,7 +14,6 @@ const MOOD_COLORS: Record<string, { bg: string; color: string }> = {
 }
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
 
-// Large pool — 6 shown at random each visit
 const PROMPT_POOL = [
   'Something with paneer', 'Quick under 20 mins', 'Light lunch today',
   'Comfort food for dinner', 'Something healthy', 'Use up the potatoes',
@@ -26,8 +25,7 @@ const PROMPT_POOL = [
   'Something with eggs', 'Bengali style', 'Maharashtrian flavours',
 ]
 function getRandomPrompts(n = 6) {
-  const shuffled = [...PROMPT_POOL].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, n)
+  return [...PROMPT_POOL].sort(() => Math.random() - 0.5).slice(0, n)
 }
 
 function DiscoverContent() {
@@ -36,9 +34,10 @@ function DiscoverContent() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [prompt, setPrompt] = useState(searchParams.get('prompt') || '')
-  const lockSlot = searchParams.get('lockSlot') || null      // 'lunch' | 'dinner' | null
-  const lockDate = searchParams.get('lockDate') || null      // 'YYYY-MM-DD' | null
+  const lockSlot = searchParams.get('lockSlot') || null
+  const lockDate = searchParams.get('lockDate') || null
   const isLockMode = !!(lockSlot && lockDate)
+
   const [dishes, setDishes] = useState<Dish[]>([])
   const [loading, setLoading] = useState(false)
   const [generated, setGenerated] = useState(false)
@@ -48,41 +47,70 @@ function DiscoverContent() {
   const [addedToday, setAddedToday] = useState<Set<string>>(new Set())
   const [addedMain, setAddedMain] = useState<Set<string>>(new Set())
   const [addedOrders, setAddedOrders] = useState<Set<string>>(new Set())
-
   const [actionDish, setActionDish] = useState<Dish|null>(null)
   const [pickingDay, setPickingDay] = useState<string|null>(null)
   const [saving, setSaving] = useState(false)
   const [editingDish, setEditingDish] = useState<Dish|null>(null)
 
-  // Auto-generate if we arrived from mood chip or lock sheet
+  // Pantry-only toggle
+  const [pantryOnly, setPantryOnly] = useState(false)
+  // Per-dish "fetch ingredients" loading state
+  const [fetchingIngredients, setFetchingIngredients] = useState<string|null>(null)
+
   useEffect(() => {
     const urlPrompt = searchParams.get('prompt')
     if (urlPrompt) {
       setPrompt(urlPrompt)
-      handleGenerate(urlPrompt)
+      handleGenerate(urlPrompt, false)
     } else if (isLockMode) {
-      // Arrived from lock sheet — auto-generate with pantry context
-      handleGenerate('')
+      handleGenerate('', false)
     }
   }, [])
 
-  async function handleGenerate(overridePrompt?: string) {
-    const usePrompt = (overridePrompt ?? prompt).trim()
+  async function handleGenerate(overridePrompt?: string, usePantryOnly?: boolean) {
+    const usePrompt    = (overridePrompt ?? prompt).trim()
+    const useFilter    = usePantryOnly ?? pantryOnly
     setLoading(true); setDishes([]); setErrorMsg(''); setGenerated(false)
     try {
-      const url = usePrompt ? `/api/suggest/dish?prompt=${encodeURIComponent(usePrompt)}` : '/api/suggest/dish'
+      let url = '/api/suggest/dish'
+      const params = new URLSearchParams()
+      if (usePrompt)  params.set('prompt', usePrompt)
+      if (useFilter)  params.set('pantry_only', '1')
+      if (params.toString()) url += '?' + params.toString()
       const res = await fetch(url)
       const d = await res.json()
       const result: Dish[] = d.dishes || []
-      // Check for non-food error from Gemini
       if (result.length === 1 && result[0].error) {
-        setErrorMsg(result[0].error)
-        setDishes([])
+        setErrorMsg(result[0].error); setDishes([])
       } else {
         setDishes(result)
       }
+      if (d.message && !result.length) setErrorMsg(d.message)
       setGenerated(true)
     } finally { setLoading(false) }
+  }
+
+  // Fetch what a dish needs to buy (called lazily when user wants to order)
+  async function fetchNeedsToBuy(dish: Dish): Promise<string[]> {
+    if (dish.needsToBuy.length > 0) return dish.needsToBuy
+    setFetchingIngredients(dish.name)
+    try {
+      const res = await fetch('/api/suggest/ingredients', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dish_name: dish.name })
+      })
+      const d = await res.json()
+      const ingredients: string[] = d.ingredients || []
+      // Filter out items already in pantry
+      const notInPantry = ingredients.filter(ing =>
+        !dish.usesFromPantry.some(p => p.toLowerCase() === ing.toLowerCase())
+      )
+      // Update dish in state
+      setDishes(prev => prev.map(d =>
+        d.name === dish.name ? { ...d, needsToBuy: notInPantry } : d
+      ))
+      return notInPantry
+    } catch { return [] } finally { setFetchingIngredients(null) }
   }
 
   async function giveFeedback(dish: Dish, signal: 'like' | 'dislike') {
@@ -90,10 +118,7 @@ function DiscoverContent() {
     setFeedback(p => ({ ...p, [dish.name]: signal }))
     await fetch('/api/feedback', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dish_name: dish.name, signal,
-        // Store the prompt context alongside the feedback for learning
-        reason: prompt.trim() || undefined
-      })
+      body: JSON.stringify({ dish_name: dish.name, signal, reason: prompt.trim() || undefined })
     })
     setSavingFeedback(null)
   }
@@ -128,6 +153,11 @@ function DiscoverContent() {
         body: JSON.stringify({ item_name: item, source: 'discover' })
       })
     }
+  }
+
+  async function handleOrderMissing(dish: Dish) {
+    const items = await fetchNeedsToBuy(dish)
+    if (items.length > 0) addToOrder(items)
   }
 
   const closeSheet = () => { setActionDish(null); setPickingDay(null) }
@@ -170,21 +200,45 @@ function DiscoverContent() {
             )}
           </div>
 
-          {/* Example prompt chips */}
-          {!generated && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {getRandomPrompts().map(ex => (
-                <button key={ex} onClick={() => { setPrompt(ex); setTimeout(() => inputRef.current?.focus(), 50) }} style={{
-                  padding: '5px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500,
-                  border: '1px solid var(--border)', background: 'white',
-                  color: 'var(--text-secondary)', cursor: 'pointer'
-                }}>{ex}</button>
-              ))}
-            </div>
+          {/* Pantry-only toggle + example prompt chips */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {/* Pantry toggle chip */}
+            <button
+              onClick={() => {
+                const next = !pantryOnly
+                setPantryOnly(next)
+                if (generated) handleGenerate(undefined, next)
+              }}
+              style={{
+                padding: '5px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700,
+                border: '1.5px solid',
+                borderColor: pantryOnly ? 'var(--green-mid)' : 'var(--border)',
+                background: pantryOnly ? 'var(--green-light)' : 'white',
+                color: pantryOnly ? 'var(--green-deep)' : 'var(--text-muted)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
+              }}
+            >
+              🧺 {pantryOnly ? 'Pantry only' : 'Pantry only'}
+            </button>
+
+            {/* Example prompt chips — only shown before first generation */}
+            {!generated && getRandomPrompts().map(ex => (
+              <button key={ex} onClick={() => { setPrompt(ex); setTimeout(() => inputRef.current?.focus(), 50) }} style={{
+                padding: '5px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500,
+                border: '1px solid var(--border)', background: 'white',
+                color: 'var(--text-secondary)', cursor: 'pointer'
+              }}>{ex}</button>
+            ))}
+          </div>
+
+          {pantryOnly && (
+            <p style={{ fontSize: 11, color: 'var(--green-mid)', fontWeight: 600, marginBottom: 8 }}>
+              🧺 Showing dishes you can make from what's in your pantry
+            </p>
           )}
 
           <button onClick={() => handleGenerate()} disabled={loading} style={{
-            width: '100%', marginTop: 12, padding: '12px', borderRadius: 12, border: 'none',
+            width: '100%', padding: '12px', borderRadius: 12, border: 'none',
             background: loading ? 'var(--green-soft)' : 'var(--green-mid)', color: 'white',
             fontSize: 14, fontWeight: 700, cursor: 'pointer',
             boxShadow: loading ? 'none' : '0 3px 10px rgba(45,106,79,0.28)'
@@ -197,7 +251,7 @@ function DiscoverContent() {
           </button>
         </div>
 
-        {/* Error message from Gemini (non-food prompt) */}
+        {/* Error message */}
         {errorMsg && (
           <div style={{ padding: '14px 16px', borderRadius: 14, background: '#FEF3C7', border: '1px solid #FDE68A', marginBottom: 14 }}>
             <p style={{ fontSize: 14, color: '#92400E', margin: 0 }}>⚠️ {errorMsg}</p>
@@ -227,10 +281,11 @@ function DiscoverContent() {
           const addedT = addedToday.has(dish.name)
           const addedM = addedMain.has(dish.name)
           const allOrdersAdded = dish.needsToBuy.length > 0 && dish.needsToBuy.every(i => addedOrders.has(i))
+          const isFetchingThis = fetchingIngredients === dish.name
 
           return (
             <div key={dish.name} className="card fade-up" style={{ marginBottom: 12, overflow: 'hidden', opacity: isDisliked ? 0.4 : 1, transition: 'opacity 0.3s' }}>
-              {/* Header */}
+              {/* Card header row */}
               <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: mood.bg, color: mood.color }}>{dish.mood}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -247,6 +302,7 @@ function DiscoverContent() {
               </div>
 
               <div style={{ padding: 14 }}>
+                {/* Dish name + YouTube + edit */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
                   <p className="font-display" onClick={() => setEditingDish(dish)} style={{ fontSize: 16, fontWeight: 700, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>{dish.name}</p>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -259,11 +315,13 @@ function DiscoverContent() {
                     <button onClick={() => setEditingDish(dish)} style={{
                       padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border)',
                       background: 'white', fontSize: 12, cursor: 'pointer', color: 'var(--text-muted)'
-                    }} title="Edit dish">✎</button>
+                    }} title="Dish info">✎</button>
                   </div>
                 </div>
+
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: 12, lineHeight: 1.5 }}>{dish.description}</p>
 
+                {/* From pantry */}
                 {dish.usesFromPantry.length > 0 && (
                   <div style={{ marginBottom: 10 }}>
                     <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-mid)', marginBottom: 6 }}>✅ From pantry</p>
@@ -275,9 +333,10 @@ function DiscoverContent() {
                   </div>
                 )}
 
+                {/* Need to buy — shown after fetching */}
                 {dish.needsToBuy.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 6 }}>🛒 Need to buy</p>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 6 }}>🛒 Need to order</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                       {dish.needsToBuy.map(ing => (
                         <span key={ing} style={{ padding: '3px 9px', borderRadius: 99, fontSize: 12, fontWeight: 600, background: '#FEF3C7', color: 'var(--amber)' }}>{ing}</span>
@@ -291,20 +350,17 @@ function DiscoverContent() {
                 ) : (
                   <div style={{ display: 'flex', gap: 8 }}>
                     {isLockMode ? (
-                      // Lock mode — one-tap lock directly from discover
                       addedT ? (
                         <div style={{ flex: 1, padding: '9px', borderRadius: 10, background: 'var(--green-pale)', border: '1px solid var(--green-light)', textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--green-deep)' }}>
                           🔒 Locked for {lockSlot}
                         </div>
                       ) : (
                         <button onClick={async () => {
-                          // Lock it immediately and go back to meal plan
                           await fetch('/api/locks', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ lock_date: lockDate, slot: lockSlot, dish_name: dish.name })
                           })
                           setAddedToday(p => new Set([...p, dish.name]))
-                          // Also add to meal plan for the correct day
                           const dayName = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date(lockDate + 'T12:00:00').getDay()]
                           await fetch('/api/meal-plan', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -326,12 +382,22 @@ function DiscoverContent() {
                         background: 'var(--green-mid)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer'
                       }}>📅 Add to plan</button>
                     )}
-                    {dish.needsToBuy.length > 0 && (
-                      <button onClick={() => addToOrder(dish.needsToBuy)} style={{
-                        padding: '9px 14px', borderRadius: 10, border: '1px solid var(--border)',
-                        background: allOrdersAdded ? 'var(--green-pale)' : 'white',
-                        fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary)'
-                      }}>🛒 {allOrdersAdded ? '✓' : 'Order'}</button>
+
+                    {/* Order missing ingredients button — lazy fetches on first tap */}
+                    {!isLockMode && (
+                      <button
+                        onClick={() => handleOrderMissing(dish)}
+                        disabled={isFetchingThis || allOrdersAdded}
+                        style={{
+                          padding: '9px 14px', borderRadius: 10, border: '1px solid var(--border)',
+                          background: allOrdersAdded ? 'var(--green-pale)' : 'white',
+                          fontSize: 13, cursor: isFetchingThis ? 'wait' : 'pointer',
+                          color: allOrdersAdded ? 'var(--green-deep)' : 'var(--text-secondary)',
+                          minWidth: 64
+                        }}
+                      >
+                        {isFetchingThis ? '⏳' : allOrdersAdded ? '✓ Ordered' : '🛒 Order'}
+                      </button>
                     )}
                   </div>
                 )}
