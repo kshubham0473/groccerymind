@@ -3,6 +3,8 @@ import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
 import { getReplacementDish, callGeminiRaw } from '@/lib/gemini'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

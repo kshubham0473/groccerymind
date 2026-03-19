@@ -95,7 +95,7 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
     } catch {
       results.push([]) // empty vector — will score 0 in similarity
     }
-    await new Promise(r => setTimeout(r, 100)) // 100ms between calls
+    // no artificial delay — Gemini embedding API allows 1500 RPM on free tier
   }
   return results
 }

@@ -3,6 +3,8 @@ import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
 import { getStarterDishes } from '@/lib/gemini'
 
+export const maxDuration = 60 // seconds — needed for embedding batch (50 calls × ~300ms)
+
 export async function GET(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
