@@ -96,6 +96,7 @@ function autoAssign(
   const unassigned = dishes.filter(d => !result[d.name] || result[d.name].length === 0)
   const freeSlots  = SLOTS.filter(s => !fixedSlots.has(s))
 
+  // Keep original category-interleaving so variety is spread across days
   function getGroup(d: any): string {
     const all = (d.name + ' ' + (d.ingredients || []).join(' ')).toLowerCase()
     if (all.includes('paneer')) return 'paneer'
@@ -117,10 +118,9 @@ function autoAssign(
   const maxLen = Math.max(...keys.map(k => groups[k].length), 0)
   for (let i = 0; i < maxLen; i++) for (const k of keys) if (groups[k][i]) ordered.push(groups[k][i])
 
-  let slotIdx = 0
-  for (const dish of ordered) {
-    if (slotIdx >= freeSlots.length) break
-    result[dish.name] = [freeSlots[slotIdx++]]
+  // Wrap around so all dishes get a slot — each slot shows 1-2 options in meal plan
+  for (let i = 0; i < ordered.length; i++) {
+    result[ordered[i].name] = [freeSlots[i % freeSlots.length]]
   }
   return result
 }
@@ -177,16 +177,23 @@ export async function POST(req: NextRequest) {
   }
   if (slotAssignments.length) await supabase.from('meal_slots').insert(slotAssignments)
 
-  // Derive pantry using Gemini categorisation
-  const allIngredients: string[] = []
-  selected.forEach((d: any) => {
-    if (Array.isArray(d.ingredients)) {
-      d.ingredients.forEach((i: any) => {
-        const name = typeof i === 'string' ? i : i?.name
-        if (name) allIngredients.push(name)
-      })
-    }
-  })
+  // Fetch ingredients for each dish via suggest/ingredients, then derive pantry
+  // (Sprint 14 inserts dishes with ingredients:[] so we fetch them fresh here)
+  const fetchedIngredients = await Promise.all(
+    insertedDishes.slice(0, 16).map(async (d: any) => {  // cap at 16 to stay within Gemini rate limits
+      try {
+        const res = await fetch(`${req.nextUrl.origin}/api/suggest/ingredients`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dish_name: d.name })
+        })
+        const j = await res.json()
+        return Array.isArray(j.ingredients) ? j.ingredients : []
+      } catch { return [] }
+    })
+  )
+
+  const allIngredients: string[] = fetchedIngredients.flat()
 
   const SPICE_BLACKLIST = new Set(['salt','oil','ghee','butter','cumin','turmeric','chilli',
     'pepper','garam masala','coriander powder','mustard','hing','ajwain','red chilli','green chilli'])

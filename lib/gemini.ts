@@ -123,9 +123,14 @@ type CatDef = { name: string; match: (d: CorpusDish) => boolean; target: number 
 
 const SPREAD_CATEGORIES: CatDef[] = [
   { name: 'Rice meals',
-    match: d => (d.meal_pairing?.toLowerCase().includes('rice') ||
-      ['pulao','biryani','khichdi','chawal'].some(w => d.name.toLowerCase().includes(w))) &&
-      !d.tags?.includes('breakfast'),
+    match: d => {
+      const n = d.name.toLowerCase()
+      const isRiceDish = ['pulao','biryani','khichdi','chawal','fried rice'].some(w => n.includes(w)) || n.endsWith(' rice')
+      const pairingIsRice = d.meal_pairing?.toLowerCase().includes('rice')
+      // Exclude corpus data errors: rice dish paired with "with Steamed Rice"
+      if (isRiceDish && pairingIsRice) return false
+      return (pairingIsRice || isRiceDish) && !d.tags?.includes('breakfast')
+    },
     target: 3 },
   { name: 'Dal & legumes',
     match: d => ['dal','rajma','chole','masoor','moong dal','chana dal']
@@ -149,7 +154,8 @@ const SPREAD_CATEGORIES: CatDef[] = [
     target: 3 },
   { name: 'Roti & paratha',
     match: d => ['paratha','poori','puri'].some(w => d.name.toLowerCase().includes(w)) &&
-      !d.name.toLowerCase().includes('paneer'),
+      !d.name.toLowerCase().includes('paneer') &&
+      d.meal_pairing?.toLowerCase() !== 'standalone',
     target: 3 },
   { name: 'Breakfast & quick',
     match: d => !!d.tags?.includes('breakfast'),
@@ -314,7 +320,7 @@ export async function searchCorpusForDiscover(
 ): Promise<CorpusDish[]> {
   const corpus = loadFullCorpus()
   // For discover, include snacks/street food too (user might want them)
-  const filtered    = applyHardFilters({ ...prefs, _allowSnacks: true } as any, corpus.length ? corpus : [])
+  // (filtered var removed — allFiltered below handles dietary/dislikes for discover)
   const allFiltered = corpus.filter(d => {
     const dietary = prefs.dietary || ''
     if (['Vegetarian','Vegan','Jain'].includes(dietary) && !d.is_vegetarian) return false

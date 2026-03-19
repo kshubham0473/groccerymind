@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 
-type Dish = { name: string; description: string; usesFromPantry: string[]; needsToBuy: string[]; prepTime: string; mood: string; error?: string }
+type Dish = { name: string; description: string; usesFromPantry: string[]; needsToBuy: string[]; prepTime: string; mood: string; youtube_url?: string; meal_pairing?: string; error?: string }
 type Feedback = Record<string, 'like' | 'dislike'>
 
 const MOOD_COLORS: Record<string, { bg: string; color: string }> = {
@@ -52,6 +52,7 @@ function DiscoverContent() {
   const [actionDish, setActionDish] = useState<Dish|null>(null)
   const [pickingDay, setPickingDay] = useState<string|null>(null)
   const [saving, setSaving] = useState(false)
+  const [editingDish, setEditingDish] = useState<Dish|null>(null)
 
   // Auto-generate if we arrived from mood chip or lock sheet
   useEffect(() => {
@@ -246,7 +247,21 @@ function DiscoverContent() {
               </div>
 
               <div style={{ padding: 14 }}>
-                <p className="font-display" style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{dish.name}</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
+                  <p className="font-display" onClick={() => setEditingDish(dish)} style={{ fontSize: 16, fontWeight: 700, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>{dish.name}</p>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    {dish.youtube_url && (
+                      <a href={dish.youtube_url} target="_blank" rel="noopener noreferrer" style={{
+                        padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border)',
+                        background: 'white', fontSize: 13, textDecoration: 'none', lineHeight: 1
+                      }} title="Watch recipe">▶</a>
+                    )}
+                    <button onClick={() => setEditingDish(dish)} style={{
+                      padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border)',
+                      background: 'white', fontSize: 12, cursor: 'pointer', color: 'var(--text-muted)'
+                    }} title="Edit dish">✎</button>
+                  </div>
+                </div>
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: 12, lineHeight: 1.5 }}>{dish.description}</p>
 
                 {dish.usesFromPantry.length > 0 && (
@@ -355,6 +370,39 @@ function DiscoverContent() {
                 background: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)'
               }}>Choose day & slot →</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dish info sheet */}
+      {editingDish && (
+        <div onClick={() => setEditingDish(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: '100%', maxWidth: 430, margin: '0 auto',
+            background: 'white', borderRadius: '24px 24px 0 0',
+            padding: '20px 20px 40px',
+          }}>
+            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 18px' }} />
+            <p className="font-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>{editingDish.name}</p>
+            {editingDish.meal_pairing && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>Pairs with: {editingDish.meal_pairing}</p>
+            )}
+            {editingDish.youtube_url ? (
+              <a href={editingDish.youtube_url} target="_blank" rel="noopener noreferrer" style={{
+                display: 'block', padding: '14px 16px', borderRadius: 14,
+                background: '#FFF1F0', border: '1px solid #FECACA',
+                textDecoration: 'none', marginBottom: 12, textAlign: 'center' as const
+              }}>
+                <span style={{ fontSize: 20 }}>▶</span>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#DC2626', margin: '6px 0 0' }}>Watch Recipe on YouTube</p>
+              </a>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>No recipe link available for this dish.</p>
+            )}
+            <button onClick={() => setEditingDish(null)} style={{
+              width: '100%', padding: '13px', borderRadius: 12, border: '1px solid var(--border)',
+              background: 'white', fontSize: 14, cursor: 'pointer', color: 'var(--text-muted)'
+            }}>Close</button>
           </div>
         </div>
       )}

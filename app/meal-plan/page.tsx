@@ -494,7 +494,7 @@ export default function MealPlanPage() {
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                         }}>
                           <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
-                            <p className="font-display" style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
+                            <p className="font-display" onClick={() => setEditingDish(s.dish)} style={{ fontSize: 14, fontWeight: 600, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>
                               {isLocked ? '🔒 ' : ''}{s.dish?.name}
                             </p>
                             {(s.dish?.meal_pairing || s.dish?.ingredients?.length > 0) && (
