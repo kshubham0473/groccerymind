@@ -211,10 +211,9 @@ export default function OnboardingPage() {
     setRegeneratingDish(oldName)
     // Use the full accumulated seen set so we never re-suggest a previously shown dish
     const excludeNames = [...seenDishNames.current]
-    const categoryHint = starterDishes.find((d: any) => d.name === oldName)?._category || ''
     const res = await fetch('/api/onboarding/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ exclude_names: excludeNames, category_hint: categoryHint })
+      body: JSON.stringify({ exclude_names: excludeNames, dish_being_replaced: oldName })
     })
     const d = await res.json()
     if (d.dish) {
