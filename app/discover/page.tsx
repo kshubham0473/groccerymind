@@ -54,8 +54,6 @@ function DiscoverContent() {
 
   // Pantry-only toggle
   const [pantryOnly, setPantryOnly] = useState(false)
-  // Per-dish "fetch ingredients" loading state
-  const [fetchingIngredients, setFetchingIngredients] = useState<string|null>(null)
 
   useEffect(() => {
     const urlPrompt = searchParams.get('prompt')
@@ -88,29 +86,6 @@ function DiscoverContent() {
       if (d.message && !result.length) setErrorMsg(d.message)
       setGenerated(true)
     } finally { setLoading(false) }
-  }
-
-  // Fetch what a dish needs to buy (called lazily when user wants to order)
-  async function fetchNeedsToBuy(dish: Dish): Promise<string[]> {
-    if (dish.needsToBuy.length > 0) return dish.needsToBuy
-    setFetchingIngredients(dish.name)
-    try {
-      const res = await fetch('/api/suggest/ingredients', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dish_name: dish.name })
-      })
-      const d = await res.json()
-      const ingredients: string[] = d.ingredients || []
-      // Filter out items already in pantry
-      const notInPantry = ingredients.filter(ing =>
-        !dish.usesFromPantry.some(p => p.toLowerCase() === ing.toLowerCase())
-      )
-      // Update dish in state
-      setDishes(prev => prev.map(d =>
-        d.name === dish.name ? { ...d, needsToBuy: notInPantry } : d
-      ))
-      return notInPantry
-    } catch { return [] } finally { setFetchingIngredients(null) }
   }
 
   async function giveFeedback(dish: Dish, signal: 'like' | 'dislike') {
@@ -153,11 +128,6 @@ function DiscoverContent() {
         body: JSON.stringify({ item_name: item, source: 'discover' })
       })
     }
-  }
-
-  async function handleOrderMissing(dish: Dish) {
-    const items = await fetchNeedsToBuy(dish)
-    if (items.length > 0) addToOrder(items)
   }
 
   const closeSheet = () => { setActionDish(null); setPickingDay(null) }
@@ -281,8 +251,6 @@ function DiscoverContent() {
           const addedT = addedToday.has(dish.name)
           const addedM = addedMain.has(dish.name)
           const allOrdersAdded = dish.needsToBuy.length > 0 && dish.needsToBuy.every(i => addedOrders.has(i))
-          const isFetchingThis = fetchingIngredients === dish.name
-
           return (
             <div key={dish.name} className="card fade-up" style={{ marginBottom: 12, overflow: 'hidden', opacity: isDisliked ? 0.4 : 1, transition: 'opacity 0.3s' }}>
               {/* Card header row */}
@@ -383,20 +351,20 @@ function DiscoverContent() {
                       }}>📅 Add to plan</button>
                     )}
 
-                    {/* Order missing ingredients button — lazy fetches on first tap */}
-                    {!isLockMode && (
+                    {/* Order missing ingredients — pre-populated from API */}
+                    {!isLockMode && dish.needsToBuy.length > 0 && (
                       <button
-                        onClick={() => handleOrderMissing(dish)}
-                        disabled={isFetchingThis || allOrdersAdded}
+                        onClick={() => addToOrder(dish.needsToBuy)}
+                        disabled={allOrdersAdded}
                         style={{
                           padding: '9px 14px', borderRadius: 10, border: '1px solid var(--border)',
                           background: allOrdersAdded ? 'var(--green-pale)' : 'white',
-                          fontSize: 13, cursor: isFetchingThis ? 'wait' : 'pointer',
+                          fontSize: 13, cursor: 'pointer',
                           color: allOrdersAdded ? 'var(--green-deep)' : 'var(--text-secondary)',
                           minWidth: 64
                         }}
                       >
-                        {isFetchingThis ? '⏳' : allOrdersAdded ? '✓ Ordered' : '🛒 Order'}
+                        {allOrdersAdded ? '✓ Ordered' : '🛒 Order'}
                       </button>
                     )}
                   </div>

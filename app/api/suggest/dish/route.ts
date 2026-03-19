@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
-import { searchCorpusForDiscover, buildHouseholdContext, buildLearningContext, callGeminiRaw, cleanJson } from '@/lib/gemini'
+import { searchCorpusForDiscover, buildHouseholdContext, buildLearningContext, parseIngredients, callGeminiRaw, cleanJson } from '@/lib/gemini'
 
 export const maxDuration = 60
 
@@ -106,32 +106,45 @@ Return ONLY a JSON array of exactly 3, no markdown:
     const candidateMap = new Map(candidates.map((d: any) => [d.name.toLowerCase(), d]))
     const pantrySet    = new Set(pantryItems.map(p => p.toLowerCase()))
 
-    const dishes = ranked.slice(0, 3)
-      .map((r: any) => {
-        const match = candidateMap.get((r.name || '').toLowerCase())
-        if (!match) return null
-        // Compute what's in pantry vs what needs ordering for this dish
-        const usesFromPantry = pantryItems.filter(p => match.name.toLowerCase().includes(p.toLowerCase()))
+    const rankedMatches = ranked.slice(0, 3)
+      .map((r: any) => candidateMap.get((r.name || '').toLowerCase())
+        ? { rank: r, match: candidateMap.get((r.name || '').toLowerCase())! }
+        : null
+      ).filter(Boolean) as { rank: any; match: any }[]
+
+    // Pre-fetch ingredients for all 3 dishes in parallel so needsToBuy shows immediately
+    const dishesWithIngredients = await Promise.all(
+      rankedMatches.map(async ({ rank, match }) => {
+        const usesFromPantry = pantryItems.filter(p =>
+          match.name.toLowerCase().includes(p.toLowerCase())
+        )
+        let needsToBuy: string[] = []
+        try {
+          const allIngredients = await parseIngredients(match.name)
+          needsToBuy = allIngredients.filter(ing =>
+            !pantryItems.some(p => p.toLowerCase() === ing.toLowerCase())
+          )
+        } catch { needsToBuy = [] }
         return {
-          name:           match.name,
-          description:    r.description || '',
+          name:          match.name,
+          description:   rank.description || '',
           usesFromPantry,
-          needsToBuy:     [],   // populated by suggest/ingredients if user taps the card
-          prepTime:       match.complexity === 'quick' ? '< 20 mins' : match.complexity === 'elaborate' ? '45+ mins' : '25–35 mins',
-          mood:           match.tags?.includes('healthy') ? 'healthy'
-                        : match.tags?.includes('comfort') ? 'hearty'
-                        : match.tags?.includes('quick')   ? 'quick'
-                        : match.tags?.includes('festive') ? 'indulgent' : 'light',
-          meal_pairing:   match.meal_pairing || '',
-          cuisine_type:   match.cuisine_type || '',
-          youtube_url:    match.youtube_url  || '',
-          is_vegetarian:  match.is_vegetarian !== false,
-          tags:           match.tags || [],
+          needsToBuy,
+          prepTime:      match.complexity === 'quick' ? '< 20 mins' : match.complexity === 'elaborate' ? '45+ mins' : '25–35 mins',
+          mood:          match.tags?.includes('healthy') ? 'healthy'
+                       : match.tags?.includes('comfort') ? 'hearty'
+                       : match.tags?.includes('quick')   ? 'quick'
+                       : match.tags?.includes('festive') ? 'indulgent' : 'light',
+          meal_pairing:  match.meal_pairing || '',
+          cuisine_type:  match.cuisine_type || '',
+          youtube_url:   match.youtube_url  || '',
+          is_vegetarian: match.is_vegetarian !== false,
+          tags:          match.tags || [],
         }
       })
-      .filter(Boolean)
+    )
 
-    return NextResponse.json({ dishes })
+    return NextResponse.json({ dishes: dishesWithIngredients })
   } catch {
     // Fallback: top 3 without descriptions
     const fallback = candidates.slice(0, 3).map((d: any) => ({

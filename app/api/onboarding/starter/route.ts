@@ -41,7 +41,7 @@ function normaliseIngredient(name: string): string {
 }
 
 // ── Ask Gemini to categorise a batch of ingredients ───────────────────────────
-import { callGeminiRaw, cleanJson } from '@/lib/gemini'
+import { callGeminiRaw, cleanJson, parseIngredients } from '@/lib/gemini'
 
 async function categoriseIngredients(ingredients: string[]): Promise<Record<string, any>> {
   const prompt = `Categorise these pantry ingredients for an Indian household grocery app.
@@ -177,19 +177,11 @@ export async function POST(req: NextRequest) {
   }
   if (slotAssignments.length) await supabase.from('meal_slots').insert(slotAssignments)
 
-  // Fetch ingredients for each dish via suggest/ingredients, then derive pantry
-  // (Sprint 14 inserts dishes with ingredients:[] so we fetch them fresh here)
+  // Derive ingredients by calling parseIngredients() directly (avoids unreliable HTTP self-calls on Vercel)
+  // Cap at 16 dishes to stay within Gemini rate limits; remaining dishes still appear in meal plan
   const fetchedIngredients = await Promise.all(
-    insertedDishes.slice(0, 16).map(async (d: any) => {  // cap at 16 to stay within Gemini rate limits
-      try {
-        const res = await fetch(`${req.nextUrl.origin}/api/suggest/ingredients`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dish_name: d.name })
-        })
-        const j = await res.json()
-        return Array.isArray(j.ingredients) ? j.ingredients : []
-      } catch { return [] }
+    insertedDishes.slice(0, 16).map(async (d: any) => {
+      try { return await parseIngredients(d.name) } catch { return [] }
     })
   )
 
