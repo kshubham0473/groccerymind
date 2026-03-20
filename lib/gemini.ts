@@ -89,6 +89,35 @@ export function buildHouseholdContext(
   return lines.length ? `\nHousehold preferences:\n${lines.join('\n')}` : ''
 }
 
+// ── Learning context from behaviour signals ───────────────────────────────────
+// Reads cooked history + lock patterns to inject personalised learning into prompts.
+// Call alongside buildHouseholdContext in Discover and suggestion routes.
+export function buildLearningContext(
+  feedback: { dish_name: string | null; signal: string; reason?: string | null }[],
+  recentlyCooked: string[],         // dish names from behaviour_log 'cooked' events, last 14 days
+  lockedPatterns: { slot: string; dish_name: string; day_of_week: number }[]  // from 'meal_locked' events
+): string {
+  const lines: string[] = []
+
+  const liked    = feedback.filter(f => f.signal === 'like').map(f => f.dish_name).filter(Boolean) as string[]
+  const disliked = feedback.filter(f => f.signal === 'dislike').map(f => f.dish_name).filter(Boolean) as string[]
+
+  if (liked.length)          lines.push(`Dishes they enjoy: ${liked.slice(0, 10).join(', ')}`)
+  if (disliked.length)       lines.push(`Dishes to avoid (disliked): ${disliked.slice(0, 10).join(', ')}`)
+  if (recentlyCooked.length) lines.push(`Cooked recently — avoid repeating: ${recentlyCooked.slice(0, 8).join(', ')}`)
+
+  // Derive slot + day preferences from lock history
+  const lunchDishes  = [...new Set(lockedPatterns.filter(l => l.slot === 'lunch').map(l => l.dish_name))].slice(0, 5)
+  const dinnerDishes = [...new Set(lockedPatterns.filter(l => l.slot === 'dinner').map(l => l.dish_name))].slice(0, 5)
+  const wkndDishes   = [...new Set(lockedPatterns.filter(l => [0, 6].includes(l.day_of_week)).map(l => l.dish_name))].slice(0, 4)
+
+  if (lunchDishes.length)  lines.push(`Often chosen for lunch: ${lunchDishes.join(', ')}`)
+  if (dinnerDishes.length) lines.push(`Often chosen for dinner: ${dinnerDishes.join(', ')}`)
+  if (wkndDishes.length)   lines.push(`Weekend favourites (from history): ${wkndDishes.join(', ')}`)
+
+  return lines.length ? `\nLearned patterns:\n${lines.join('\n')}` : ''
+}
+
 // ── Ingredient parser ─────────────────────────────────────────────────────────
 export async function parseIngredients(dishName: string): Promise<string[]> {
   const prompt = `You are a knowledgeable Indian home cooking assistant.
@@ -284,7 +313,6 @@ Return ONLY a JSON object, no markdown:
 }
 
 // ── Single card regeneration ──────────────────────────────────────────────────
-// Embeds the dish being replaced → finds semantically similar but distinct corpus matches
 export async function getReplacementDish(
   excludeNames: string[],
   prefs: Record<string, any>,
@@ -298,35 +326,31 @@ export async function getReplacementDish(
   const queryEmbedding = await embedText(dishBeingReplaced)
   const nearest        = findNearest(queryEmbedding, filtered, 20, excludeSet)
 
-  // Range 0.50–0.87: related enough to be in the same neighbourhood,
-  // different enough to not be a duplicate
   const goodCandidates = nearest.filter(n => n.score < 0.88 && n.score > 0.50)
-  const pool = goodCandidates.length
-    ? goodCandidates.slice(0, 5)
-    : nearest.slice(0, 5)
+  const pool = goodCandidates.length ? goodCandidates.slice(0, 5) : nearest.slice(0, 5)
 
   if (!pool.length) return null
   return pool[Math.floor(Math.random() * pool.length)].dish
 }
 
 // ── Discover: semantic search + Gemini rank ───────────────────────────────────
-// Embeds user query → nearest corpus dishes → Gemini picks best 3 and writes descriptions
 export async function searchCorpusForDiscover(
   query: string,
   prefs: Record<string, any>,
   dislikedDishNames: string[],
   pantryItems: string[],
-  nCandidates = 15
+  nCandidates = 15,
+  pantryOnly = false
 ): Promise<CorpusDish[]> {
   const corpus = loadFullCorpus()
-  // For discover, include snacks/street food too (user might want them)
-  // (filtered var removed — allFiltered below handles dietary/dislikes for discover)
+
+  // Dietary + dislikes filter (includes snacks for discover)
   const allFiltered = corpus.filter(d => {
     const dietary = prefs.dietary || ''
     if (['Vegetarian','Vegan','Jain'].includes(dietary) && !d.is_vegetarian) return false
     const dislikes = (prefs.dislikes || '').toLowerCase()
     if (dislikes) {
-      const words = dislikes.split(',').map((w: string) => w.trim())
+      const words = dislikes.replace(/;/g, ',').split(',').map((w: string) => w.trim()).filter(Boolean)
       const n = d.name.toLowerCase()
       if (words.some((w: string) => n.includes(w))) return false
     }
@@ -336,7 +360,18 @@ export async function searchCorpusForDiscover(
   if (!allFiltered.length) return []
 
   const dislikedSet = new Set(dislikedDishNames.map(n => n.toLowerCase()))
-  const available   = allFiltered.filter(d => !dislikedSet.has(d.name.toLowerCase()))
+  let available = allFiltered.filter(d => !dislikedSet.has(d.name.toLowerCase()))
+
+  // Pantry-only mode: restrict to dishes whose name overlaps with in-stock pantry items
+  if (pantryOnly && pantryItems.length > 0) {
+    const pantrySet = new Set(pantryItems.map(p => p.toLowerCase()))
+    const pantryFiltered = available.filter(d => {
+      const n = d.name.toLowerCase()
+      return [...pantrySet].some(p => p.length > 3 && n.includes(p))
+    })
+    // Only apply if we get enough results; otherwise fall back gracefully
+    if (pantryFiltered.length >= 4) available = pantryFiltered
+  }
 
   // No query: return random varied selection
   if (!query.trim()) {
@@ -382,7 +417,6 @@ Return ONLY valid JSON, no markdown:
 }
 
 // ── Morning mood nudge ────────────────────────────────────────────────────────
-// Indian festival calendar — major festivals by month-day
 const INDIAN_FESTIVALS: Record<string, string> = {
   '01-14': 'Makar Sankranti', '01-15': 'Makar Sankranti',
   '01-26': 'Republic Day',
@@ -399,7 +433,7 @@ const INDIAN_FESTIVALS: Record<string, string> = {
 }
 
 function getTodayFestival(): string | null {
-  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000) // IST
+  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
   const dd = String(now.getUTCDate()).padStart(2, '0')
   return INDIAN_FESTIVALS[`${mm}-${dd}`] || null
@@ -424,7 +458,6 @@ export async function getMoodNudge(context: {
   const festivalLine = festival ? `Today is ${festival} — a great reason to cook something special!` : ''
   const nameLine = context.userName ? `The user's name is ${context.userName}.` : ''
 
-  // Rotate personality styles — picked fresh each call for variety
   const personalities = [
     'cheeky and witty — use a food pun or clever wordplay',
     'warm and encouraging like a caring auntie',
