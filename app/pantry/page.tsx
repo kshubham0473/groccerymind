@@ -34,6 +34,28 @@ const DEPLETION_DEFAULTS: Record<string, { days: number; tier: PantryTier }> = {
 }
 const CATEGORIES = Object.keys(DEPLETION_DEFAULTS)
 
+// Keyword-based auto-categoriser — runs as user types, no API call needed
+function autoCategory(name: string): string | null {
+  const n = name.toLowerCase().trim()
+  if (!n) return null
+  if (['palak','spinach','methi','coriander','mint','curry leaves','fenugreek','lettuce','kale','cabbage','patta'].some(k => n.includes(k))) return 'Leafy Greens'
+  if (['tomato','onion','potato','aloo','capsicum','carrot','cauliflower','gobi','bhindi','baingan','peas','beans','tinda','lauki','cucumber','corn','sweet corn','broccoli','mushroom','pumpkin','zucchini','arbi','yam','radish','mooli','beetroot'].some(k => n.includes(k))) return 'Vegetables'
+  if (['apple','banana','mango','orange','grape','papaya','watermelon','pomegranate','guava','kiwi','pear','peach','plum','lychee','strawberry','blueberry'].some(k => n.includes(k))) return 'Fruits'
+  if (['milk','curd','dahi','yogurt','paneer','cream','cheese','butter','ghee','lassi','buttermilk','chaas','khoa','mawa'].some(k => n.includes(k))) return 'Dairy'
+  if (['egg','anda','ande'].some(k => n.includes(k))) return 'Eggs'
+  if (['bread','pav','bun','loaf','toast','rusk','biscuit','croissant'].some(k => n.includes(k))) return 'Bread'
+  if (['rice','basmati','sona masoori','poha','puffed rice','murmura'].some(k => n.includes(k))) return 'Grains & Rice'
+  if (['dal','lentil','rajma','chole','chana','moong','masoor','urad','toor','arhar','beans','kidney'].some(k => n.includes(k))) return 'Lentils & Dal'
+  if (['atta','flour','maida','besan','suji','rava','semolina','wheat','oats','millet','bajra','jowar','ragi','cornflour'].some(k => n.includes(k))) return 'Flour'
+  if (['oil','ghee','vanaspati','olive oil','coconut oil','groundnut','mustard oil','sunflower'].some(k => n.includes(k))) return 'Oil & Ghee'
+  if (['onion','garlic','ginger','lahsun','adrak'].some(k => n.includes(k))) return 'Onion & Garlic'
+  if (['masala','spice','powder','cumin','turmeric','chilli','pepper','cardamom','cinnamon','clove','bay leaf','star anise','saffron'].some(k => n.includes(k))) return 'Spices'
+  if (['chips','namkeen','sev','mixture','popcorn','cracker','cookie','chocolate','candy','snack','wafer','kurkure'].some(k => n.includes(k))) return 'Snacks'
+  if (['juice','water','soda','cola','drink','tea','coffee','chai','cocoa','sherbet','squash','energy'].some(k => n.includes(k))) return 'Beverages'
+  if (['tinned','canned','can','packet','packaged','frozen','instant','ready','sauce','ketchup','pickle','jam','honey','vinegar','soy','noodle','pasta','macaroni','vermicelli'].some(k => n.includes(k))) return 'Canned & Dry'
+  return null
+}
+
 export default function PantryPage() {
   const [items, setItems] = useState<PantryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +66,7 @@ export default function PantryPage() {
   const [adding, setAdding] = useState(false)
   const [newItem, setNewItem] = useState({ name: '', tier: 'fresh' as PantryTier, category: 'Vegetables', depletion_days: 5 })
   const [saving, setSaving] = useState(false)
+  const [autoCatApplied, setAutoCatApplied] = useState(false)
 
   useEffect(() => {
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
@@ -236,21 +259,34 @@ export default function PantryPage() {
 
       {/* Add item sheet */}
       {adding && (
-        <div onClick={() => setAdding(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
+        <div onClick={() => { setAdding(false); setAutoCatApplied(false); setNewItem({ name: '', tier: 'fresh', category: 'Vegetables', depletion_days: 5 }) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 36px', border: 'none' }}>
             <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
             <p className="font-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Add to Pantry</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input autoFocus value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
+              <input autoFocus value={newItem.name} onChange={e => {
+                const name = e.target.value
+                setNewItem(p => ({ ...p, name }))
+                const cat = autoCategory(name)
+                if (cat && cat !== newItem.category) {
+                  onCategoryChange(cat)
+                  setAutoCatApplied(true)
+                } else if (!cat) {
+                  setAutoCatApplied(false)
+                }
+              }}
                 placeholder="Item name (e.g. Curd)"
                 style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
 
               {/* Category selector — drives tier + days automatically */}
               <div>
-                <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Category</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: 0 }}>Category</p>
+                  {autoCatApplied && <span style={{ fontSize: 11, color: 'var(--green-mid)', fontWeight: 600 }}>✨ Auto-detected</span>}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   {CATEGORIES.map(cat => (
-                    <button key={cat} onClick={() => onCategoryChange(cat)} style={{
+                    <button key={cat} onClick={() => { onCategoryChange(cat); setAutoCatApplied(false) }} style={{
                       padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer',
                       fontSize: 12, fontWeight: 600, textAlign: 'left',
                       background: newItem.category === cat ? 'var(--green-mid)' : 'white',

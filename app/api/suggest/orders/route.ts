@@ -8,15 +8,17 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createServiceClient()
-  const [ordersRes, pantryRes, mealsRes, prefsRes, feedbackRes] = await Promise.all([
+  const [ordersRes, pantryRes, goodPantryRes, mealsRes, prefsRes, feedbackRes] = await Promise.all([
     supabase.from('order_items').select('item_name').eq('household_id', user.household_id).eq('is_checked', false),
     supabase.from('pantry_items').select('name, tier, last_ordered_at, stock_status').eq('household_id', user.household_id).neq('stock_status', 'good'),
+    supabase.from('pantry_items').select('name').eq('household_id', user.household_id).eq('stock_status', 'good'),
     supabase.from('meal_slots').select('dish:dishes(name)').eq('household_id', user.household_id),
     supabase.from('households').select('preferences').eq('id', user.household_id).single(),
     supabase.from('dish_feedback').select('dish_name, signal').eq('household_id', user.household_id),
   ])
 
   const currentOrderItems = ordersRes.data?.map(o => o.item_name) || []
+  const goodPantryItems   = goodPantryRes.data?.map((i: any) => i.name) || []
   const now = new Date()
   const lowPantryItems = (pantryRes.data || []).map(i => ({
     name: i.name, tier: i.tier,
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
   const householdContext = buildHouseholdContext(prefs, feedback)
 
   try {
-    const suggestions = await getOrderSuggestions({ currentOrderItems, lowPantryItems, upcomingMeals: upcomingMeals.slice(0, 10), householdContext })
+    const suggestions = await getOrderSuggestions({ currentOrderItems, lowPantryItems, goodPantryItems, upcomingMeals: upcomingMeals.slice(0, 10), householdContext })
     return NextResponse.json({ suggestions })
   } catch (e: any) {
     return NextResponse.json({ suggestions: [], error: e.message })
