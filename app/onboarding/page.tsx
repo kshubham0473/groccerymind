@@ -343,7 +343,7 @@ export default function OnboardingPage() {
             <Section title="Cuisines you cook most">
               <PillSelect options={CUISINE_OPTIONS} value={cuisines} onChange={setCuisines} />
             </Section>
-            <Section title="Proteins you use" hint="Stops Gemini suggesting ingredients you don't cook with.">
+            <Section title="Proteins you use" hint="GroceryMind won't suggest dishes with these ingredients.">
               <PillSelect options={PROTEIN_OPTIONS} value={proteinPrefs} onChange={setProteinPrefs} />
             </Section>
             <Section title="Preferred dish styles" hint="What kinds of dishes do you enjoy most?">
@@ -370,7 +370,7 @@ export default function OnboardingPage() {
             <Section title="You typically cook for">
               <PillSelect options={OCCASION_OPTIONS} value={occasions} onChange={setOccasions} />
             </Section>
-            <Section title="Always avoid" hint="Gemini reads this every time it suggests a meal.">
+            <Section title="Always avoid" hint="GroceryMind avoids these on every suggestion.">
               <textarea value={dislikes} onChange={e => setDislikes(e.target.value)}
                 placeholder="e.g. nobody likes bitter gourd, avoid too much garlic..."
                 rows={3} style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit', background: 'white', resize: 'none', lineHeight: 1.5 }} />
@@ -408,7 +408,7 @@ export default function OnboardingPage() {
               <div>
                 <div style={{ textAlign: 'center', padding: '20px 0 16px' }}>
                   <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)' }}>✨ Building your personalised list...</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Gemini is curating dishes from your preferences</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>GroceryMind is curating dishes from your preferences</p>
                 </div>
                 {[1,2,3,4,5].map(i => <div key={i} className="skeleton" style={{ height: 58, borderRadius: 14, marginBottom: 10 }} />)}
               </div>

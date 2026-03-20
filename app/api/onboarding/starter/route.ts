@@ -34,10 +34,22 @@ export async function GET(req: NextRequest) {
 }
 
 // ── Normalise ingredient names ────────────────────────────────────────────────
+const PANTRY_SYNONYMS: Record<string, string> = {
+  'potatoes':'potato','tomatoes':'tomato','onions':'onion','eggs':'egg',
+  'carrots':'carrot','peas':'pea','beans':'bean','lentils':'lentil',
+  'dahi':'curd','yogurt':'curd','yoghurt':'curd',
+  'aloo':'potato','alu':'potato','tamatar':'tomato','pyaaz':'onion',
+  'anda':'egg','ande':'egg','palak':'spinach','gobi':'cauliflower',
+  'bhindi':'okra','baingan':'brinjal','shimla mirch':'capsicum',
+  'sweet corn':'corn','maize':'corn','bhutta':'corn',
+  'matar':'peas','green peas':'peas','chana':'chickpeas','chole':'chickpeas',
+  'rajma':'kidney beans','chawal':'rice','atta':'flour','maida':'flour',
+  'paneer':'paneer','cottage cheese':'paneer',
+}
 function normaliseIngredient(name: string): string {
-  return name.toLowerCase().trim()
-    .replace(/es$/, '').replace(/s$/, '')
-    .replace(/\s+/g, ' ').trim()
+  const n = name.toLowerCase().trim().replace(/\s+/g, ' ')
+  if (PANTRY_SYNONYMS[n]) return PANTRY_SYNONYMS[n]
+  return n.replace(/es$/, '').replace(/s$/, '').trim()
 }
 
 // ── Ask Gemini to categorise a batch of ingredients ───────────────────────────

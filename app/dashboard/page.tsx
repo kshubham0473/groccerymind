@@ -22,14 +22,9 @@ function nudgeCacheKey() {
 }
 function getMoodNudgeCache() {
   try {
-    // Key already encodes date + slot — if the slot has changed since caching,
-    // nudgeCacheKey() returns a different key and we get null naturally.
-    // But also explicitly clear stale keys from other slots on the same day.
-    const currentKey = nudgeCacheKey()
-    const raw = localStorage.getItem(currentKey)
+    const raw = localStorage.getItem(nudgeCacheKey())
     if (!raw) return null
     const { data, dismissed } = JSON.parse(raw)
-    // Extra guard: if dismissed flag is set but we've moved to a new time slot, show fresh nudge
     return { data, dismissed }
   } catch { return null }
 }
@@ -38,10 +33,126 @@ function setMoodNudgeCache(data: any, dismissed = false) {
 }
 
 const QC_APPS: Record<string, { name: string; emoji: string; url: string }> = {
-  blinkit:   { name: 'Blinkit',    emoji: '🟡', url: 'https://blinkit.com' },
-  zepto:     { name: 'Zepto',      emoji: '🟣', url: 'https://www.zeptonow.com' },
-  swiggy:    { name: 'Swiggy Instamart', emoji: '🟠', url: 'https://www.swiggy.com/instamart' },
-  bigbasket: { name: 'BigBasket',  emoji: '🟢', url: 'https://www.bigbasket.com' },
+  blinkit:   { name: 'Blinkit',         emoji: '🟡', url: 'https://blinkit.com' },
+  zepto:     { name: 'Zepto',           emoji: '🟣', url: 'https://www.zeptonow.com' },
+  swiggy:    { name: 'Swiggy Instamart',emoji: '🟠', url: 'https://www.swiggy.com/instamart' },
+  bigbasket: { name: 'BigBasket',       emoji: '🟢', url: 'https://www.bigbasket.com' },
+}
+
+// ── Insights from behaviour_log ───────────────────────────────────────────────
+interface BehaviourEvent {
+  event_type: string
+  metadata: any
+  created_at: string
+}
+
+interface Insight {
+  emoji: string
+  headline: string
+  subline: string
+}
+
+function computeInsight(events: BehaviourEvent[]): Insight | null {
+  if (!events.length) return null
+
+  const now = Date.now()
+  const DAY = 86400000
+
+  const cooked   = events.filter(e => e.event_type === 'cooked')
+  const locked   = events.filter(e => e.event_type === 'meal_locked')
+  const discover = events.filter(e => e.event_type === 'discover_prompt')
+
+  // ── Priority 1: Cooking streak ──────────────────────────────────────────────
+  const cookedDays = new Set(
+    cooked.map(e => new Date(e.created_at).toDateString())
+  )
+  let streak = 0
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(now - i * DAY).toDateString()
+    if (cookedDays.has(d)) streak++
+    else if (i > 0) break  // only count consecutive from today backwards
+  }
+  if (streak >= 3) {
+    return {
+      emoji: '🔥',
+      headline: `${streak}-day cooking streak`,
+      subline: `You've cooked every day for ${streak} days straight`,
+    }
+  }
+
+  // ── Priority 2: Most cooked dish (last 30 days) ─────────────────────────────
+  const last30 = cooked.filter(e => now - new Date(e.created_at).getTime() < 30 * DAY)
+  const dishCount: Record<string, number> = {}
+  for (const e of last30) {
+    const name = e.metadata?.dish_name
+    if (name) dishCount[name] = (dishCount[name] || 0) + 1
+  }
+  const topDish = Object.entries(dishCount).sort((a, b) => b[1] - a[1])[0]
+  if (topDish && topDish[1] >= 3) {
+    return {
+      emoji: '👨‍🍳',
+      headline: `${topDish[0]} — ${topDish[1]}x this month`,
+      subline: 'Your household favourite right now',
+    }
+  }
+
+  // ── Priority 3: Cook rate this week ─────────────────────────────────────────
+  const last7Days = new Set(
+    Array.from({ length: 7 }, (_, i) => new Date(now - i * DAY).toDateString())
+  )
+  const lockedThisWeek = new Set(
+    locked
+      .filter(e => now - new Date(e.created_at).getTime() < 7 * DAY)
+      .map(e => `${e.metadata?.lock_date}_${e.metadata?.slot}`)
+  )
+  const cookedThisWeek = cooked.filter(
+    e => last7Days.has(new Date(e.created_at).getDateString?.() || new Date(e.created_at).toDateString())
+  ).length
+  const lockedCount = lockedThisWeek.size
+  if (lockedCount >= 3 && cookedThisWeek >= 2) {
+    const pct = Math.round((cookedThisWeek / lockedCount) * 100)
+    return {
+      emoji: '📊',
+      headline: `${cookedThisWeek} of ${lockedCount} planned meals cooked`,
+      subline: pct >= 80 ? 'Solid week in the kitchen' : 'Room to cook more this week',
+    }
+  }
+
+  // ── Priority 4: Discover usage ───────────────────────────────────────────────
+  const discoverLast14 = discover.filter(
+    e => now - new Date(e.created_at).getTime() < 14 * DAY
+  )
+  if (discoverLast14.length >= 3) {
+    return {
+      emoji: '✨',
+      headline: `${discoverLast14.length} new dishes explored`,
+      subline: 'In the last two weeks — variety is the spice',
+    }
+  }
+
+  // ── Priority 5: Favourite slot ───────────────────────────────────────────────
+  const lunchCount  = cooked.filter(e => e.metadata?.slot === 'lunch').length
+  const dinnerCount = cooked.filter(e => e.metadata?.slot === 'dinner').length
+  if (lunchCount + dinnerCount >= 6) {
+    const more = lunchCount > dinnerCount ? 'lunch' : 'dinner'
+    const less = more === 'lunch' ? 'dinner' : 'lunch'
+    return {
+      emoji: more === 'lunch' ? '☀️' : '🌙',
+      headline: `You cook ${more} more than ${less}`,
+      subline: `${Math.max(lunchCount, dinnerCount)} ${more}s logged so far`,
+    }
+  }
+
+  // ── Fallback: simple total ───────────────────────────────────────────────────
+  if (cooked.length >= 2) {
+    return {
+      emoji: '🍳',
+      headline: `${cooked.length} meals cooked and logged`,
+      subline: 'Keep going — insights get richer over time',
+    }
+  }
+
+  return null
 }
 
 export default function Dashboard() {
@@ -49,16 +160,15 @@ export default function Dashboard() {
   const router = useRouter()
   const [lowItems, setLowItems] = useState<PantryItem[]>([])
   const [todaySlots, setTodaySlots] = useState<any[]>([])
-  const [allSlots, setAllSlots] = useState<any[]>([])
   const [orders, setOrders] = useState<OrderItem[]>([])
   const [todayLocks, setTodayLocks] = useState<DailyLock[]>([])
   const [prefs, setPrefs] = useState<HouseholdPreferences>({})
   const [cookedToday, setCookedToday] = useState<Record<string, string>>({})
-  const [showCookAnything, setShowCookAnything] = useState(false)
+  const [insight, setInsight] = useState<Insight | null>(null)
 
   // Mood nudge
   const [moodNudge, setMoodNudge] = useState<{ message: string; chips: string[] } | null>(null)
-  const [moodNudgeDismissed, setMoodNudgeDismissed] = useState(true) // start hidden
+  const [moodNudgeDismissed, setMoodNudgeDismissed] = useState(true)
   const [moodNudgeLoading, setMoodNudgeLoading] = useState(false)
 
   const today = getTodayKey()
@@ -76,7 +186,7 @@ export default function Dashboard() {
       if (Array.isArray(d)) setLowItems(d.filter((i: any) => i.stock_status !== 'good' && i.depletion_source === 'auto'))
     })
     fetch('/api/meal-plan').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) { setAllSlots(d); setTodaySlots(d.filter((s: any) => s.day === today)) }
+      if (Array.isArray(d)) setTodaySlots(d.filter((s: any) => s.day === today))
     })
     fetch('/api/orders').then(r => r.json()).then(d => {
       if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked)))
@@ -88,7 +198,12 @@ export default function Dashboard() {
       if (!d.error) setPrefs(d)
     })
 
-    // Mood nudge — 4 slots per day, slot-based cache
+    // Fetch behaviour_log for insights (last 30 days)
+    fetch('/api/log/summary').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setInsight(computeInsight(d))
+    }).catch(() => {})
+
+    // Mood nudge
     const cached = getMoodNudgeCache()
     if (cached) {
       setMoodNudge(cached.data)
@@ -134,7 +249,6 @@ export default function Dashboard() {
   const dinner = todaySlots.filter(s => s.slot === 'dinner')
   const lunchLock = todayLocks.find(l => l.slot === 'lunch')
   const dinnerLock = todayLocks.find(l => l.slot === 'dinner')
-  const allDishes = Array.from(new Map(allSlots.map(s => [s.dish?.name, s.dish])).values()).filter(Boolean)
   const qcApps = ((prefs.quickcommerce || []) as string[]).map((k: string) => QC_APPS[k]).filter(Boolean)
 
   if (!user) return null
@@ -161,7 +275,7 @@ export default function Dashboard() {
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* ── Mood nudge (4x daily, dismissible) ── */}
+        {/* ── Mood nudge ── */}
         {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
           <div style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)', padding: 16, position: 'relative' }}>
             <button onClick={dismissMoodNudge} style={{ position: 'absolute', top: 10, right: 12, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18, lineHeight: 1, zIndex: 2 }}>×</button>
@@ -196,7 +310,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Today's Decision (locks) ── */}
+        {/* ── Today's Decision ── */}
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -212,12 +326,17 @@ export default function Dashboard() {
               <div key={slot} style={{ marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, margin: 0 }}>{label}</p>
-                  {lock
-                    ? <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)', margin: '3px 0 0' }}>{lock.dish_name}</p>
-                    : <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '3px 0 0' }}>
-                        {options.length > 0 ? `${options.length} options — not locked` : 'Nothing planned'}
-                      </p>
-                  }
+                  {lock ? (
+                    <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)', margin: '3px 0 0' }}>{lock.dish_name}</p>
+                  ) : options.length > 0 ? (
+                    // Show dish names instead of "N options — not locked"
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '3px 0 0' }}>
+                      {options.slice(0, 2).map((s: any) => s.dish?.name).filter(Boolean).join(', ')}
+                      {options.length > 2 && <span style={{ color: 'var(--text-muted)', opacity: 0.6 }}> +{options.length - 2}</span>}
+                    </p>
+                  ) : (
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '3px 0 0' }}>Nothing planned</p>
+                  )}
                 </div>
                 <div style={{ flexShrink: 0 }}>
                   {lock
@@ -225,7 +344,7 @@ export default function Dashboard() {
                       ? <span className="pill badge-good">✓ Cooked</span>
                       : <button onClick={() => logCooked(slot, lock.dish_name)} style={{ padding: '6px 14px', borderRadius: 99, border: 'none', background: 'var(--green-deep)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cooked ✓</button>
                     : options.length > 0
-                      ? <a href="/meal-plan" style={{ padding: '6px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'white', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>Lock →</a>
+                      ? <a href="/meal-plan" style={{ padding: '6px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'white', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>Choose →</a>
                       : null
                   }
                 </div>
@@ -234,7 +353,23 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Order list gist ── */}
+        {/* ── Household insight card ── */}
+        {insight && (
+          <div style={{
+            borderRadius: 16, padding: '14px 16px',
+            background: 'white', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', gap: 14,
+            boxShadow: 'var(--shadow)'
+          }}>
+            <span style={{ fontSize: 28, flexShrink: 0 }}>{insight.emoji}</span>
+            <div style={{ minWidth: 0 }}>
+              <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{insight.headline}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>{insight.subline}</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Order list ── */}
         <a href="/orders" style={{ textDecoration: 'none', color: 'inherit' }}>
           <div className="card" style={{ overflow: 'hidden' }}>
             <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -255,7 +390,6 @@ export default function Dashboard() {
                       ))}
                     </div>
                     {orders.length > 5 && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>+{orders.length - 5} more</p>}
-
                   </>
               }
             </div>
@@ -284,39 +418,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Cook anything ── */}
-        <button onClick={() => setShowCookAnything(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid var(--border)', background: 'white', fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>
-          🍳 Cooking something not on the plan?
-        </button>
-
       </div>
-
-      {/* Cook anything sheet */}
-      {showCookAnything && (
-        <div onClick={() => setShowCookAnything(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 36px', border: 'none', maxHeight: '70vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
-            <p className="font-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Log a meal</p>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>Pick from your rotation</p>
-            <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {allDishes.map((dish: any) => (
-                <div key={dish.name} style={{ display: 'flex', gap: 6 }}>
-                  {['lunch','dinner'].map(slot => (
-                    <button key={slot} onClick={() => { logCooked(slot, dish.name); setShowCookAnything(false) }} style={{
-                      flex: 1, padding: '9px 10px', borderRadius: 10, border: '1px solid var(--border)',
-                      background: cookedToday[slot] === dish.name ? 'var(--green-light)' : 'white',
-                      fontSize: 12, fontWeight: 500, cursor: 'pointer', color: 'var(--text-primary)', textAlign: 'left'
-                    }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block' }}>{slot === 'lunch' ? '☀️' : '🌙'}</span>
-                      {dish.name}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

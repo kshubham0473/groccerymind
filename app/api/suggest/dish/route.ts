@@ -5,6 +5,72 @@ import { searchCorpusForDiscover, buildHouseholdContext, buildLearningContext, p
 
 export const maxDuration = 60
 
+// ── Ingredient matching helpers ───────────────────────────────────────────────
+// Handles plural/singular, Hindi↔English synonyms, and common name variants
+const INGREDIENT_SYNONYMS: Record<string, string[]> = {
+  potato:       ['potato','potatoes','aloo','alu'],
+  tomato:       ['tomato','tomatoes','tamatar'],
+  onion:        ['onion','onions','pyaaz','kanda','pyaz'],
+  garlic:       ['garlic','lahsun','lasun'],
+  ginger:       ['ginger','adrak'],
+  curd:         ['curd','yogurt','yoghurt','dahi'],
+  milk:         ['milk','doodh'],
+  paneer:       ['paneer','cottage cheese'],
+  capsicum:     ['capsicum','bell pepper','shimla mirch'],
+  corn:         ['corn','sweet corn','maize','bhutta'],
+  peas:         ['peas','matar','green peas','frozen peas'],
+  spinach:      ['spinach','palak'],
+  cauliflower:  ['cauliflower','gobi','gobhi'],
+  'french beans':['french beans','beans','green beans','fansi'],
+  carrot:       ['carrot','carrots','gajar'],
+  lemon:        ['lemon','nimbu','lime'],
+  egg:          ['egg','eggs','anda','ande'],
+  chickpeas:    ['chickpeas','chole','chana','chick peas'],
+  'kidney beans':['kidney beans','rajma'],
+  rice:         ['rice','chawal','basmati'],
+  flour:        ['flour','atta','wheat flour','maida'],
+  oil:          ['oil','tel'],
+  butter:       ['butter','makhan'],
+  cream:        ['cream','malai','fresh cream'],
+  bread:        ['bread','pav','pao'],
+  mushroom:     ['mushroom','mushrooms','khumb'],
+  brinjal:      ['brinjal','eggplant','baingan','aubergine'],
+  'bitter gourd':['bitter gourd','karela'],
+  'bottle gourd':['bottle gourd','lauki','ghia','dudhi'],
+  'green chilli':['green chilli','hari mirch','green chili'],
+  'spring onion':['spring onion','green onion','scallion'],
+}
+
+// Build reverse map: every variant → canonical form
+const SYNONYM_LOOKUP = new Map<string, string>()
+for (const [canonical, variants] of Object.entries(INGREDIENT_SYNONYMS)) {
+  for (const v of variants) SYNONYM_LOOKUP.set(v.toLowerCase(), canonical)
+}
+
+function normaliseIngredientName(name: string): string {
+  const n = name.toLowerCase().trim()
+  // Check synonym map first
+  if (SYNONYM_LOOKUP.has(n)) return SYNONYM_LOOKUP.get(n)!
+  // Strip common plural suffixes
+  if (n.endsWith('oes')) return n.slice(0, -2)  // tomatoes → tomat (then re-check)
+  if (n.endsWith('es') && n.length > 4) return n.slice(0, -2)
+  if (n.endsWith('s') && n.length > 3) return n.slice(0, -1)
+  return n
+}
+
+function ingredientInPantry(ingredient: string, pantryItems: string[]): boolean {
+  const normIng = normaliseIngredientName(ingredient)
+  return pantryItems.some(p => {
+    const normP = normaliseIngredientName(p)
+    return normP === normIng ||
+      normP.includes(normIng) ||
+      normIng.includes(normP) ||
+      // Also check original synonym variants
+      (INGREDIENT_SYNONYMS[normP] || []).some(v => v === normIng) ||
+      (INGREDIENT_SYNONYMS[normIng] || []).some(v => v === normP)
+  })
+}
+
 export async function GET(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -116,14 +182,12 @@ Return ONLY a JSON array of exactly 3, no markdown:
     const dishesWithIngredients = await Promise.all(
       rankedMatches.map(async ({ rank, match }) => {
         const usesFromPantry = pantryItems.filter(p =>
-          match.name.toLowerCase().includes(p.toLowerCase())
+          ingredientInPantry(p, [match.name])  // check if pantry item is in dish name
         )
         let needsToBuy: string[] = []
         try {
           const allIngredients = await parseIngredients(match.name)
-          needsToBuy = allIngredients.filter(ing =>
-            !pantryItems.some(p => p.toLowerCase() === ing.toLowerCase())
-          )
+          needsToBuy = allIngredients.filter(ing => !ingredientInPantry(ing, pantryItems))
         } catch { needsToBuy = [] }
         return {
           name:          match.name,
@@ -149,7 +213,7 @@ Return ONLY a JSON array of exactly 3, no markdown:
     // Fallback: top 3 without descriptions
     const fallback = candidates.slice(0, 3).map((d: any) => ({
       name: d.name, description: '',
-      usesFromPantry: pantryItems.filter((p: string) => d.name.toLowerCase().includes(p.toLowerCase())),
+      usesFromPantry: pantryItems.filter((p: string) => ingredientInPantry(p, [d.name])),
       needsToBuy: [],
       prepTime:   d.complexity === 'quick' ? '< 20 mins' : '25–35 mins',
       mood:       d.tags?.includes('quick') ? 'quick' : 'light',

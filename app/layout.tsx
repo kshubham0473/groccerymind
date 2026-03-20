@@ -8,7 +8,13 @@ export const metadata: Metadata = {
   description: 'Smart grocery companion for your Indian kitchen',
   manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'GroceryMind' },
-  icons: { apple: '/icon-192.png', icon: '/icon-192.png' },
+  icons: {
+    apple: [
+      { url: '/icon-192.png', sizes: '192x192' },
+      { url: '/apple-touch-icon.png', sizes: '180x180' },
+    ],
+    icon: '/icon-192.png',
+  },
 }
 
 export const viewport: Viewport = {
@@ -24,7 +30,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
       </head>
       <body>
         <AppProvider>

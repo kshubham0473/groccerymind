@@ -137,7 +137,7 @@ export default function AdminPage() {
             <span style={{ fontSize: 18 }}>🗑️</span>
             <div>
               <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>Clear Smart Pick cache</p>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Forces a fresh Gemini suggestion today</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Forces a fresh GroceryMind suggestion today</p>
             </div>
           </button>
         </div>
