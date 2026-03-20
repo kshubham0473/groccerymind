@@ -106,7 +106,7 @@ function computeInsight(events: BehaviourEvent[]): Insight | null {
       .map(e => `${e.metadata?.lock_date}_${e.metadata?.slot}`)
   )
   const cookedThisWeek = cooked.filter(
-    e => last7Days.has(new Date(e.created_at).getDateString?.() || new Date(e.created_at).toDateString())
+    e => last7Days.has(new Date(e.created_at).toDateString())
   ).length
   const lockedCount = lockedThisWeek.size
   if (lockedCount >= 3 && cookedThisWeek >= 2) {
