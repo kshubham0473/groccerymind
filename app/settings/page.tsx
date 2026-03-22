@@ -128,9 +128,10 @@ export default function SettingsPage() {
     setNewMemberForm({ username: '', password: '', role: 'member' }); setAdminSaving(false)
   }
 
-  async function createInvite() {
+  async function createInvite(invite_type: 'member' | 'beta' = 'member') {
     setCreatingInvite(true)
-    const res = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ max_uses: 2, expires_days: 30 }) })
+    const max_uses = invite_type === 'beta' ? 10 : 2
+    const res = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ max_uses, expires_days: 30, invite_type }) })
     const d = await res.json()
     if (!d.error) setInvites(p => [d, ...p])
     setCreatingInvite(false)
@@ -261,9 +262,14 @@ export default function SettingsPage() {
               <div style={{ padding: '12px 16px 0', borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Invite Codes</p>
-                  <button onClick={createInvite} disabled={creatingInvite} style={{ padding: '5px 12px', borderRadius: 99, border: 'none', background: 'var(--green-mid)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                    {creatingInvite ? '...' : '+ New'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => createInvite('member')} disabled={creatingInvite} style={{ padding: '5px 10px', borderRadius: 99, border: '1px solid var(--green-mid)', background: 'white', color: 'var(--green-mid)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                      + Partner
+                    </button>
+                    <button onClick={() => createInvite('beta')} disabled={creatingInvite} style={{ padding: '5px 10px', borderRadius: 99, border: 'none', background: 'var(--green-mid)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                      {creatingInvite ? '...' : '+ Beta'}
+                    </button>
+                  </div>
                 </div>
                 {invites.length === 0 ? (
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, fontStyle: 'italic' }}>No active invite codes. Create one to share.</p>
@@ -271,7 +277,11 @@ export default function SettingsPage() {
                   <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                     <div>
                       <p style={{ fontSize: 15, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--green-deep)', margin: 0, fontFamily: 'monospace' }}>{inv.code}</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ padding: '1px 7px', borderRadius: 99, fontSize: 10, fontWeight: 700,
+                          background: inv.invite_type === 'beta' ? '#DBEAFE' : '#D1FAE5',
+                          color: inv.invite_type === 'beta' ? '#1E40AF' : '#065F46'
+                        }}>{inv.invite_type === 'beta' ? 'Beta' : 'Partner'}</span>
                         {inv.uses_so_far}/{inv.max_uses} used · expires {new Date(inv.expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                       </p>
                     </div>
@@ -281,7 +291,9 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 ))}
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, marginBottom: 12 }}>Share codes with new households. Each code allows up to 2 people to join.</p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, marginBottom: 12 }}>
+                  <strong>Partner</strong> — adds someone to your household (for family/partner). <strong>Beta</strong> — gives new testers their own separate household.
+                </p>
               </div>
 
               <a href="/onboarding" style={{ display: 'flex', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit', gap: 10 }}>

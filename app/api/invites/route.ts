@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Admin only' }, { status: 403 })
 
-  const { max_uses = 2, expires_days = 30 } = await req.json().catch(() => ({}))
+  const { max_uses = 2, expires_days = 30, invite_type = 'member' } = await req.json().catch(() => ({}))
   const supabase = createServiceClient()
 
   const expires_at = new Date(Date.now() + expires_days * 24 * 60 * 60 * 1000).toISOString()
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
       uses_so_far: 0,
       created_by: user.id,
       expires_at,
+      invite_type,
     })
     .select()
     .single()

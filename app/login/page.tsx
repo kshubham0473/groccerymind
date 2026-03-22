@@ -111,9 +111,9 @@ export default function LoginPage() {
               marginTop: 4, padding: '13px', borderRadius: 12, border: 'none',
               background: loading ? 'var(--green-soft)' : 'var(--green-mid)',
               color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer'
-            }}>{loading ? 'Joining...' : 'Join household'}</button>
+            }}>{loading ? 'Getting started...' : 'Get started'}</button>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
-              You'll be added to the household that shared this code.
+              Partner codes join an existing household. Beta codes create your own.
             </p>
           </form>
         )}
