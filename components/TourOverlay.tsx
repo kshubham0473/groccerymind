@@ -24,15 +24,13 @@ export default function TourOverlay() {
   const [visible, setVisible] = useState(false)
   const rafRef = useRef<number>(0)
 
-  // When step changes or page changes, find the target element and measure it
   useEffect(() => {
     if (!active || !currentStep) { setVisible(false); setTargetRect(null); return }
-    // Only show overlay when we're on the correct page for this step
     if (pathname !== currentStep.page) { setVisible(false); return }
 
     setVisible(false)
     waitForElement(currentStep.selector).then(el => {
-      if (!el) { setVisible(true); setTargetRect(null); return }  // no element — show centered tooltip
+      if (!el) { setVisible(true); setTargetRect(null); return }
       const measure = () => {
         const rect = el.getBoundingClientRect()
         const pad  = currentStep.spotlightPadding ?? 8
@@ -45,16 +43,12 @@ export default function TourOverlay() {
         setVisible(true)
       }
       measure()
-      // Scroll element into view smoothly
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      // Re-measure after scroll settles
       rafRef.current = window.requestAnimationFrame(() => {
         setTimeout(measure, 350)
       })
     })
-    return () => {
-      if (rafRef.current) window.cancelAnimationFrame(rafRef.current)
-    }
+    return () => { if (rafRef.current) window.cancelAnimationFrame(rafRef.current) }
   }, [active, currentStep, pathname])
 
   if (!active || !visible || !currentStep) return null
@@ -62,83 +56,82 @@ export default function TourOverlay() {
 
   const vw = typeof window !== 'undefined' ? window.innerWidth  : 430
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+
   const TOOLTIP_W = Math.min(vw - 32, 380)
-  const TOOLTIP_H = 160  // approximate
+  // Accurate height: dots row + title + body + buttons + padding
+  const TOOLTIP_H = 230
+  const MARGIN    = 16
 
-  // Compute tooltip position
+  const tooltipLeft = Math.max(MARGIN, (vw - TOOLTIP_W) / 2)
+
   let tooltipTop: number
-  let tooltipLeft: number = Math.max(16, (vw - TOOLTIP_W) / 2)
-
   if (!targetRect) {
-    // No element found — centre the tooltip
-    tooltipTop  = vh / 2 - TOOLTIP_H / 2
+    tooltipTop = vh / 2 - TOOLTIP_H / 2
   } else if (currentStep.position === 'bottom') {
-    tooltipTop = targetRect.top + targetRect.height + 16
-    if (tooltipTop + TOOLTIP_H > vh - 20) tooltipTop = targetRect.top - TOOLTIP_H - 16
+    tooltipTop = targetRect.top + targetRect.height + MARGIN
+    if (tooltipTop + TOOLTIP_H > vh - MARGIN) tooltipTop = targetRect.top - TOOLTIP_H - MARGIN
   } else if (currentStep.position === 'top') {
-    tooltipTop = targetRect.top - TOOLTIP_H - 16
-    if (tooltipTop < 20) tooltipTop = targetRect.top + targetRect.height + 16
+    tooltipTop = targetRect.top - TOOLTIP_H - MARGIN
+    if (tooltipTop < MARGIN) tooltipTop = targetRect.top + targetRect.height + MARGIN
   } else {
     tooltipTop = vh / 2 - TOOLTIP_H / 2
   }
+  // Hard clamp — tooltip never leaves the viewport
+  tooltipTop = Math.max(MARGIN, Math.min(tooltipTop, vh - TOOLTIP_H - MARGIN))
 
   const isLast = stepIndex === totalSteps - 1
 
+  // SVG cutout approach: single path with evenodd fill-rule punches a transparent
+  // hole in the overlay — one opacity layer, no stacking/compounding
+  const spotlightPath = targetRect
+    ? `M0 0 H${vw} V${vh} H0 Z M${targetRect.left} ${targetRect.top} H${targetRect.left + targetRect.width} V${targetRect.top + targetRect.height} H${targetRect.left} Z`
+    : `M0 0 H${vw} V${vh} H0 Z`
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, pointerEvents: 'none' }}>
-      {/* Full-screen dark overlay — clickable to advance */}
-      <div
+
+      {/* Single SVG overlay — one clean opacity layer with cutout hole */}
+      <svg
+        width={vw} height={vh}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'all', cursor: 'pointer' }}
         onClick={nextStep}
-        style={{
-          position: 'absolute', inset: 0,
-          background: 'rgba(0,0,0,0.72)',
-          pointerEvents: 'all',
-        }}
-      />
+      >
+        <path d={spotlightPath} fill="rgba(0,0,0,0.65)" fillRule="evenodd" />
+        {targetRect && (
+          <rect
+            x={targetRect.left} y={targetRect.top}
+            width={targetRect.width} height={targetRect.height}
+            rx={12} fill="none"
+            stroke="rgba(255,255,255,0.4)" strokeWidth={2}
+          />
+        )}
+      </svg>
 
-      {/* Spotlight cutout — punches a hole in the overlay using box-shadow */}
-      {targetRect && (
-        <div
-          onClick={nextStep}
-          style={{
-            position: 'absolute',
-            top:    targetRect.top,
-            left:   targetRect.left,
-            width:  targetRect.width,
-            height: targetRect.height,
-            borderRadius: 12,
-            boxShadow: '0 0 0 9999px rgba(0,0,0,0.72)',
-            border: '2px solid rgba(255,255,255,0.35)',
-            pointerEvents: 'all',
-            cursor: 'pointer',
-          }}
-        />
-      )}
-
-      {/* Tooltip card */}
+      {/* Tooltip card — always within viewport */}
       <div
         style={{
-          position:  'absolute',
-          top:       tooltipTop,
-          left:      tooltipLeft,
-          width:     TOOLTIP_W,
-          background: 'white',
-          borderRadius: 18,
-          padding:   '18px 20px 16px',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.3)',
+          position:      'absolute',
+          top:           tooltipTop,
+          left:          tooltipLeft,
+          width:         TOOLTIP_W,
+          background:    'white',
+          borderRadius:  18,
+          padding:       '18px 20px 16px',
+          boxShadow:     '0 8px 40px rgba(0,0,0,0.25)',
           pointerEvents: 'all',
-          animation: 'tourFadeUp 0.22s ease',
+          animation:     'tourFadeUp 0.22s ease',
         }}
       >
         {/* Progress dots */}
-        <div style={{ display: 'flex', gap: 5, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div key={i} style={{
-              width:  i === stepIndex ? 18 : 6,
-              height: 6,
+              width:      i === stepIndex ? 18 : 6,
+              height:     6,
               borderRadius: 99,
-              background: i === stepIndex ? 'var(--green-mid, #2D6A4F)' : '#D1D5DB',
+              background: i === stepIndex ? '#2D6A4F' : '#D1D5DB',
               transition: 'width 0.2s ease',
+              flexShrink: 0,
             }} />
           ))}
         </div>
