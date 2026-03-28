@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useApp } from '@/components/AppProvider'
+import { useTour } from '@/components/TourProvider'
 import { useRouter } from 'next/navigation'
 
 const DIETARY_OPTIONS = ['No restrictions', 'Vegetarian', 'Vegan', 'Jain', 'Eggetarian']
@@ -51,6 +52,7 @@ function Sec({ title, children }: { title: string; children: React.ReactNode }) 
 
 export default function SettingsPage() {
   const { user, household, logout } = useApp()
+  const { startTour } = useTour()
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -320,6 +322,22 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* ── Help ── */}
+        <div className="card" style={{ overflow: 'hidden', marginBottom: 0 }}>
+          <button onClick={startTour} style={{
+            width: '100%', padding: '14px 16px', background: 'white', border: 'none',
+            cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,
+            fontFamily: 'inherit'
+          }}>
+            <span style={{ fontSize: 20 }}>🗺️</span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Take the tour</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Walkthrough of all features — takes 2 minutes</p>
+            </div>
+            <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 16 }}>›</span>
+          </button>
+        </div>
 
         {/* ── Sign out ── */}
         <button onClick={logout} style={{

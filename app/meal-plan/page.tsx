@@ -400,7 +400,7 @@ export default function MealPlanPage() {
 
       <div className="page-body" style={{ paddingTop: 0 }}>
         {/* Day selector */}
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '16px 0', marginBottom: 4 }}>
+        <div data-tour="day-selector" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '16px 0', marginBottom: 4 }}>
           {DAYS.map(day => {
             const date = dateForDay(day)
             const dayLocks = locks.filter(l => l.lock_date === date)
@@ -442,7 +442,7 @@ export default function MealPlanPage() {
           const items = daySlots.filter(s => s.slot === key)
 
           return (
-            <div key={key} className="card" style={{ marginBottom: 14, overflow: 'hidden' }}>
+            <div key={key} className="card" data-tour="meal-slot" style={{ marginBottom: 14, overflow: 'hidden' }}>
               {/* Slot header */}
               <div style={{ padding: '11px 14px', background: bg, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>{label}</span>

@@ -256,7 +256,7 @@ export default function Dashboard() {
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       {/* Header */}
-      <div className="page-header">
+      <div className="page-header" data-tour="header">
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -311,7 +311,7 @@ export default function Dashboard() {
         )}
 
         {/* ── Today's Decision ── */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card" data-tour="todays-decision" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>🔒</span>
@@ -355,7 +355,7 @@ export default function Dashboard() {
 
         {/* ── Household insight card ── */}
         {insight && (
-          <div style={{
+          <div data-tour="insight-card" style={{
             borderRadius: 16, padding: '14px 16px',
             background: 'white', border: '1px solid var(--border)',
             display: 'flex', alignItems: 'center', gap: 14,

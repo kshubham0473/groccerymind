@@ -172,6 +172,7 @@ export default function PantryPage() {
         </div>
 
         {/* Shelf sections */}
+        <div data-tour="pantry-shelf">
         {TIERS.map(tier => {
           const tierItems = filtered.filter(i => i.tier === tier.key)
           if (filterTier !== 'all' && filterTier !== tier.key) return null
@@ -211,7 +212,8 @@ export default function PantryPage() {
           )
         })}
 
-        <button onClick={() => setAdding(true)} style={{
+        </div>
+        <button data-tour="pantry-add" onClick={() => setAdding(true)} style={{
           width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed var(--green-light)',
           background: 'none', color: 'var(--green-mid)', fontSize: 13, fontWeight: 600, cursor: 'pointer'
         }}>+ Add item to pantry</button>

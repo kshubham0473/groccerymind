@@ -185,6 +185,7 @@ function DiscoverContent() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <input
               ref={inputRef}
+              data-tour="discover-input"
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !loading && handleGenerate()}
@@ -204,6 +205,7 @@ function DiscoverContent() {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
             {/* Pantry toggle chip */}
             <button
+              data-tour="pantry-toggle"
               onClick={() => {
                 const next = !pantryOnly
                 setPantryOnly(next)

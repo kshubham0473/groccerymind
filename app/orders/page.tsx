@@ -186,7 +186,7 @@ export default function OrdersPage() {
         )}
       </div>
 
-      <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="page-body" data-tour="order-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* ── Add item + frequent chips ── */}
         <div className="card" style={{ padding: 14 }}>
