@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
-import { getStarterDishes } from '@/lib/gemini'
+import { getStarterDishes, buildHouseholdContext } from '@/lib/gemini'
 
 export const maxDuration = 60
 
@@ -19,7 +19,15 @@ export async function GET(req: NextRequest) {
   const prefs = data?.preferences || {}
 
   try {
-    const dishes = await getStarterDishes({ householdContext: '', prefs })
+    // Build full household context so Gemini knows dietary + cuisine + dislikes
+    // when freely naming 50 dishes — without this it ignores all preferences
+    const householdContext = buildHouseholdContext(prefs, [])
+
+    // Inject cuisine_prefs into prefs so corpus cuisine filter activates
+    // _allowAllCuisines: false means non-Indian non-preferred cuisines are excluded
+    const enrichedPrefs = { ...prefs, _allowAllCuisines: false }
+
+    const dishes = await getStarterDishes({ householdContext, prefs: enrichedPrefs })
     if (!dishes.length) {
       return NextResponse.json({
         dishes: [],
@@ -34,26 +42,14 @@ export async function GET(req: NextRequest) {
 }
 
 // ── Normalise ingredient names ────────────────────────────────────────────────
-const PANTRY_SYNONYMS: Record<string, string> = {
-  'potatoes':'potato','tomatoes':'tomato','onions':'onion','eggs':'egg',
-  'carrots':'carrot','peas':'pea','beans':'bean','lentils':'lentil',
-  'dahi':'curd','yogurt':'curd','yoghurt':'curd',
-  'aloo':'potato','alu':'potato','tamatar':'tomato','pyaaz':'onion',
-  'anda':'egg','ande':'egg','palak':'spinach','gobi':'cauliflower',
-  'bhindi':'okra','baingan':'brinjal','shimla mirch':'capsicum',
-  'sweet corn':'corn','maize':'corn','bhutta':'corn',
-  'matar':'peas','green peas':'peas','chana':'chickpeas','chole':'chickpeas',
-  'rajma':'kidney beans','chawal':'rice','atta':'flour','maida':'flour',
-  'paneer':'paneer','cottage cheese':'paneer',
-}
 function normaliseIngredient(name: string): string {
-  const n = name.toLowerCase().trim().replace(/\s+/g, ' ')
-  if (PANTRY_SYNONYMS[n]) return PANTRY_SYNONYMS[n]
-  return n.replace(/es$/, '').replace(/s$/, '').trim()
+  return name.toLowerCase().trim()
+    .replace(/es$/, '').replace(/s$/, '')
+    .replace(/\s+/g, ' ').trim()
 }
 
 // ── Ask Gemini to categorise a batch of ingredients ───────────────────────────
-import { callGeminiRaw, cleanJson, parseIngredients } from '@/lib/gemini'
+import { callGeminiRaw, cleanJson } from '@/lib/gemini'
 
 async function categoriseIngredients(ingredients: string[]): Promise<Record<string, any>> {
   const prompt = `Categorise these pantry ingredients for an Indian household grocery app.
@@ -189,11 +185,19 @@ export async function POST(req: NextRequest) {
   }
   if (slotAssignments.length) await supabase.from('meal_slots').insert(slotAssignments)
 
-  // Derive ingredients by calling parseIngredients() directly (avoids unreliable HTTP self-calls on Vercel)
-  // Cap at 16 dishes to stay within Gemini rate limits; remaining dishes still appear in meal plan
+  // Fetch ingredients for each dish via suggest/ingredients, then derive pantry
+  // (Sprint 14 inserts dishes with ingredients:[] so we fetch them fresh here)
   const fetchedIngredients = await Promise.all(
-    insertedDishes.slice(0, 16).map(async (d: any) => {
-      try { return await parseIngredients(d.name) } catch { return [] }
+    insertedDishes.slice(0, 16).map(async (d: any) => {  // cap at 16 to stay within Gemini rate limits
+      try {
+        const res = await fetch(`${req.nextUrl.origin}/api/suggest/ingredients`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dish_name: d.name })
+        })
+        const j = await res.json()
+        return Array.isArray(j.ingredients) ? j.ingredients : []
+      } catch { return [] }
     })
   )
 

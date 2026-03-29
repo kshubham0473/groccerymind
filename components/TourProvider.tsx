@@ -1,21 +1,22 @@
 'use client'
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { TOUR_STEPS, TOUR_STORAGE_KEY, TOUR_STEP_KEY, TourStep } from '@/lib/tour-steps'
 
 interface TourCtx {
-  active:      boolean
-  currentStep: TourStep | null
-  stepIndex:   number
-  totalSteps:  number
-  startTour:   () => void
-  nextStep:    () => void
-  skipTour:    () => void
+  active:       boolean
+  currentStep:  TourStep | null
+  stepIndex:    number
+  totalSteps:   number
+  startTour:    () => void
+  nextStep:     () => void
+  skipTour:     () => void
+  triggerIfNew: () => void
 }
 
 const TourContext = createContext<TourCtx>({
   active: false, currentStep: null, stepIndex: 0, totalSteps: TOUR_STEPS.length,
-  startTour: () => {}, nextStep: () => {}, skipTour: () => {},
+  startTour: () => {}, nextStep: () => {}, skipTour: () => {}, triggerIfNew: () => {},
 })
 
 export function TourProvider({ children }: { children: ReactNode }) {
@@ -23,16 +24,16 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const [active, setActive]   = useState(false)
   const [stepIndex, setStepIndex] = useState(0)
 
-  // On mount: auto-start if first login
-  useEffect(() => {
+  // triggerIfNew: called by the dashboard after auth is confirmed
+  // Never auto-fires on login/onboarding pages
+  const triggerIfNew = useCallback(() => {
     try {
       const seen = localStorage.getItem(TOUR_STORAGE_KEY)
       if (!seen) {
-        // Small delay so the dashboard loads first
         setTimeout(() => startTour(), 1200)
       }
     } catch {}
-  }, [])
+  }, [startTour])
 
   const startTour = useCallback(() => {
     setStepIndex(0)
@@ -77,7 +78,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
     <TourContext.Provider value={{
       active, currentStep, stepIndex,
       totalSteps: TOUR_STEPS.length,
-      startTour, nextStep, skipTour,
+      startTour, nextStep, skipTour, triggerIfNew,
     }}>
       {children}
     </TourContext.Provider>

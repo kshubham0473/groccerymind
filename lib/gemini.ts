@@ -89,35 +89,6 @@ export function buildHouseholdContext(
   return lines.length ? `\nHousehold preferences:\n${lines.join('\n')}` : ''
 }
 
-// ── Learning context from behaviour signals ───────────────────────────────────
-// Reads cooked history + lock patterns to inject personalised learning into prompts.
-// Call alongside buildHouseholdContext in Discover and suggestion routes.
-export function buildLearningContext(
-  feedback: { dish_name: string | null; signal: string; reason?: string | null }[],
-  recentlyCooked: string[],         // dish names from behaviour_log 'cooked' events, last 14 days
-  lockedPatterns: { slot: string; dish_name: string; day_of_week: number }[]  // from 'meal_locked' events
-): string {
-  const lines: string[] = []
-
-  const liked    = feedback.filter(f => f.signal === 'like').map(f => f.dish_name).filter(Boolean) as string[]
-  const disliked = feedback.filter(f => f.signal === 'dislike').map(f => f.dish_name).filter(Boolean) as string[]
-
-  if (liked.length)          lines.push(`Dishes they enjoy: ${liked.slice(0, 10).join(', ')}`)
-  if (disliked.length)       lines.push(`Dishes to avoid (disliked): ${disliked.slice(0, 10).join(', ')}`)
-  if (recentlyCooked.length) lines.push(`Cooked recently — avoid repeating: ${recentlyCooked.slice(0, 8).join(', ')}`)
-
-  // Derive slot + day preferences from lock history
-  const lunchDishes  = [...new Set(lockedPatterns.filter(l => l.slot === 'lunch').map(l => l.dish_name))].slice(0, 5)
-  const dinnerDishes = [...new Set(lockedPatterns.filter(l => l.slot === 'dinner').map(l => l.dish_name))].slice(0, 5)
-  const wkndDishes   = [...new Set(lockedPatterns.filter(l => [0, 6].includes(l.day_of_week)).map(l => l.dish_name))].slice(0, 4)
-
-  if (lunchDishes.length)  lines.push(`Often chosen for lunch: ${lunchDishes.join(', ')}`)
-  if (dinnerDishes.length) lines.push(`Often chosen for dinner: ${dinnerDishes.join(', ')}`)
-  if (wkndDishes.length)   lines.push(`Weekend favourites (from history): ${wkndDishes.join(', ')}`)
-
-  return lines.length ? `\nLearned patterns:\n${lines.join('\n')}` : ''
-}
-
 // ── Ingredient parser ─────────────────────────────────────────────────────────
 export async function parseIngredients(dishName: string): Promise<string[]> {
   const prompt = `You are a knowledgeable Indian home cooking assistant.
@@ -233,18 +204,37 @@ export async function getStarterDishes(context: {
   const corpus = loadFullCorpus()
   if (!corpus.length) return []
 
-  const prefs    = context.prefs || {}
   const filtered = applyHardFilters(corpus, prefs)
   if (!filtered.length) return []
 
   // Step 1: Gemini freely names 50 dishes for this household
+  // Build explicit dietary + cuisine constraints for the prompt
+  const prefs = context.prefs || {}
+  const dietary = prefs.dietary || 'No restrictions'
+  const cuisinePrefs: string[] = prefs.cuisine_prefs || []
+  const dislikesText = prefs.dislikes ? `Hard avoids (never include): ${prefs.dislikes}` : ''
+
+  const dietaryRule = dietary === 'Vegetarian' ? 'STRICT VEGETARIAN ONLY — absolutely no eggs, no meat, no fish, no seafood.'
+    : dietary === 'Vegan' ? 'STRICT VEGAN ONLY — no eggs, no dairy, no meat, no fish.'
+    : dietary === 'Jain' ? 'STRICT JAIN ONLY — no eggs, no meat, no root vegetables (onion, potato, garlic, carrot).'
+    : dietary === 'Eggetarian' ? 'Vegetarian + eggs allowed. No meat or fish.'
+    : 'No dietary restrictions.'
+
+  const cuisineRule = cuisinePrefs.length > 0
+    ? `Preferred cuisines: ${cuisinePrefs.join(', ')}. Stick primarily to these and Indian cuisines. Avoid unrelated global cuisines like Italian, Mexican, Thai unless explicitly listed.`
+    : 'Indian cuisines primarily. A few global dishes are fine.'
+
   const suggestPrompt = `You are helping plan meals for an Indian household.
 ${context.householdContext}
 
+DIETARY RULE: ${dietaryRule}
+CUISINE RULE: ${cuisineRule}
+${dislikesText}
+
 Name 50 dishes this household would realistically cook at home across a typical week.
 Include: everyday rice meals, dal/legume dishes, vegetable sabzis, paratha/roti meals,
-quick breakfasts, egg dishes (if dietary allows), paneer dishes, 2-3 weekend specials,
-and 2-3 global dishes (pasta, noodles, tacos etc.) if it matches their preferences.
+quick breakfasts, paneer dishes, 2-3 weekend specials.
+Respect ALL dietary rules strictly — violations are not acceptable.
 
 Return ONLY a JSON array of dish names, no markdown:
 ["Dal Tadka", "Poha", "Rajma Chawal"]`
@@ -313,6 +303,7 @@ Return ONLY a JSON object, no markdown:
 }
 
 // ── Single card regeneration ──────────────────────────────────────────────────
+// Embeds the dish being replaced → finds semantically similar but distinct corpus matches
 export async function getReplacementDish(
   excludeNames: string[],
   prefs: Record<string, any>,
@@ -326,31 +317,35 @@ export async function getReplacementDish(
   const queryEmbedding = await embedText(dishBeingReplaced)
   const nearest        = findNearest(queryEmbedding, filtered, 20, excludeSet)
 
+  // Range 0.50–0.87: related enough to be in the same neighbourhood,
+  // different enough to not be a duplicate
   const goodCandidates = nearest.filter(n => n.score < 0.88 && n.score > 0.50)
-  const pool = goodCandidates.length ? goodCandidates.slice(0, 5) : nearest.slice(0, 5)
+  const pool = goodCandidates.length
+    ? goodCandidates.slice(0, 5)
+    : nearest.slice(0, 5)
 
   if (!pool.length) return null
   return pool[Math.floor(Math.random() * pool.length)].dish
 }
 
 // ── Discover: semantic search + Gemini rank ───────────────────────────────────
+// Embeds user query → nearest corpus dishes → Gemini picks best 3 and writes descriptions
 export async function searchCorpusForDiscover(
   query: string,
   prefs: Record<string, any>,
   dislikedDishNames: string[],
   pantryItems: string[],
-  nCandidates = 15,
-  pantryOnly = false
+  nCandidates = 15
 ): Promise<CorpusDish[]> {
   const corpus = loadFullCorpus()
-
-  // Dietary + dislikes filter (includes snacks for discover)
+  // For discover, include snacks/street food too (user might want them)
+  // (filtered var removed — allFiltered below handles dietary/dislikes for discover)
   const allFiltered = corpus.filter(d => {
     const dietary = prefs.dietary || ''
     if (['Vegetarian','Vegan','Jain'].includes(dietary) && !d.is_vegetarian) return false
     const dislikes = (prefs.dislikes || '').toLowerCase()
     if (dislikes) {
-      const words = dislikes.replace(/;/g, ',').split(',').map((w: string) => w.trim()).filter(Boolean)
+      const words = dislikes.split(',').map((w: string) => w.trim())
       const n = d.name.toLowerCase()
       if (words.some((w: string) => n.includes(w))) return false
     }
@@ -360,18 +355,7 @@ export async function searchCorpusForDiscover(
   if (!allFiltered.length) return []
 
   const dislikedSet = new Set(dislikedDishNames.map(n => n.toLowerCase()))
-  let available = allFiltered.filter(d => !dislikedSet.has(d.name.toLowerCase()))
-
-  // Pantry-only mode: restrict to dishes whose name overlaps with in-stock pantry items
-  if (pantryOnly && pantryItems.length > 0) {
-    const pantrySet = new Set(pantryItems.map(p => p.toLowerCase()))
-    const pantryFiltered = available.filter(d => {
-      const n = d.name.toLowerCase()
-      return [...pantrySet].some(p => p.length > 3 && n.includes(p))
-    })
-    // Only apply if we get enough results; otherwise fall back gracefully
-    if (pantryFiltered.length >= 4) available = pantryFiltered
-  }
+  const available   = allFiltered.filter(d => !dislikedSet.has(d.name.toLowerCase()))
 
   // No query: return random varied selection
   if (!query.trim()) {
@@ -417,6 +401,7 @@ Return ONLY valid JSON, no markdown:
 }
 
 // ── Morning mood nudge ────────────────────────────────────────────────────────
+// Indian festival calendar — major festivals by month-day
 const INDIAN_FESTIVALS: Record<string, string> = {
   '01-14': 'Makar Sankranti', '01-15': 'Makar Sankranti',
   '01-26': 'Republic Day',
@@ -433,7 +418,7 @@ const INDIAN_FESTIVALS: Record<string, string> = {
 }
 
 function getTodayFestival(): string | null {
-  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
+  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000) // IST
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
   const dd = String(now.getUTCDate()).padStart(2, '0')
   return INDIAN_FESTIVALS[`${mm}-${dd}`] || null
@@ -458,6 +443,7 @@ export async function getMoodNudge(context: {
   const festivalLine = festival ? `Today is ${festival} — a great reason to cook something special!` : ''
   const nameLine = context.userName ? `The user's name is ${context.userName}.` : ''
 
+  // Rotate personality styles — picked fresh each call for variety
   const personalities = [
     'cheeky and witty — use a food pun or clever wordplay',
     'warm and encouraging like a caring auntie',
@@ -500,28 +486,17 @@ Return ONLY valid JSON, no markdown:
 export async function getOrderSuggestions(context: {
   currentOrderItems: string[]
   lowPantryItems: { name: string; tier: string; daysSinceOrder: number }[]
-  goodPantryItems?: string[]
   upcomingMeals: string[]
   householdContext?: string
 }): Promise<{ item: string; reason: string }[]> {
-  const goodStock = context.goodPantryItems?.length
-    ? `Well stocked (already have): ${context.goodPantryItems.slice(0, 20).join(', ')}`
-    : ''
   const prompt = `You are a smart Indian household grocery assistant.
 Already in order list: ${context.currentOrderItems.join(', ') || 'none'}
-Low / finished pantry items (need restocking): ${context.lowPantryItems.map(i => `${i.name} (${i.daysSinceOrder}d since restock)`).join(', ') || 'none'}
-${goodStock}
-Upcoming meals this week: ${context.upcomingMeals.join(', ') || 'none'}
+Low pantry items: ${context.lowPantryItems.map(i => `${i.name} (${i.daysSinceOrder}d since restock)`).join(', ') || 'none'}
+Upcoming meals: ${context.upcomingMeals.join(', ') || 'none'}
 ${context.householdContext || ''}
-Task: suggest up to 5 grocery items to order.
-Rules:
-- Cross-reference the upcoming meals against what is already well stocked — only suggest ingredients that are missing or low
-- Do NOT suggest items already in the order list
-- Do NOT suggest items that are already well stocked
-- Do NOT suggest spices, salt, or oil
-- Prioritise items needed for the upcoming meals first, then low pantry items
+Suggest up to 5 items to add. Do NOT suggest items already in the order list. Do NOT suggest spices or salt or oil.
 Return ONLY a JSON array, no markdown:
-[{"item": "name", "reason": "short reason e.g. needed for Dal Tadka, running low"}]`
+[{"item": "name", "reason": "short reason"}]`
   try {
     const parsed = JSON.parse(cleanJson(await callGeminiRaw(prompt)))
     return Array.isArray(parsed) ? parsed.slice(0, 5) : []

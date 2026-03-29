@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/components/AppProvider'
+import { useTour } from '@/components/TourProvider'
 import { PantryItem, OrderItem, DailyLock, HouseholdPreferences } from '@/types'
 
 const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
@@ -166,6 +167,8 @@ export default function Dashboard() {
   const [cookedToday, setCookedToday] = useState<Record<string, string>>({})
   const [insight, setInsight] = useState<Insight | null>(null)
 
+  const { triggerIfNew } = useTour()
+
   // Mood nudge
   const [moodNudge, setMoodNudge] = useState<{ message: string; chips: string[] } | null>(null)
   const [moodNudgeDismissed, setMoodNudgeDismissed] = useState(true)
@@ -198,12 +201,17 @@ export default function Dashboard() {
       if (!d.error) setPrefs(d)
     })
 
+    // Start tour for first-time users — only fires here (post-auth, on dashboard)
+    triggerIfNew()
+
     // Fetch behaviour_log for insights (last 30 days)
     fetch('/api/log/summary').then(r => r.json()).then(d => {
       if (Array.isArray(d)) setInsight(computeInsight(d))
     }).catch(() => {})
 
-    // Mood nudge
+    const { triggerIfNew } = useTour()
+
+  // Mood nudge
     const cached = getMoodNudgeCache()
     if (cached) {
       setMoodNudge(cached.data)

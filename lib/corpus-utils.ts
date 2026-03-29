@@ -154,6 +154,12 @@ export function semanticDedup(
 }
 
 // ── Hard filters: dietary, dislikes, skip-list ────────────────────────────────
+// Dishes mis-tagged as is_vegetarian=true in the corpus but actually contain eggs
+// applyHardFilters checks this list and excludes them for vegetarian/vegan/jain diets
+const EGG_DISHES_MISTAGGED = new Set([
+  'shakshuka', 'shakshouka',
+])
+
 const SKIP_TITLE_WORDS = [
   'halwa','kheer','ladoo','barfi','mithai','payasam',
   'gulab jamun','jalebi','rasgulla','gulgule','malpua',
@@ -204,8 +210,12 @@ export function applyHardFilters(
 ): CorpusDish[] {
   const dietary      = prefs.dietary || 'No restrictions'
   const dislikeRaw   = (prefs.dislikes || '').toLowerCase()
+  // Strip negation prefixes so "no egg", "without onion", "avoid garlic" all extract the ingredient
+  const NEGATION_PREFIXES = /^(no |not |without |avoid |avoiding |don't like |dislike |hate )/
   const dislikeWords = dislikeRaw
-    ? dislikeRaw.replace(/;/g, ',').split(',').map((w: string) => w.trim()).filter(Boolean)
+    ? dislikeRaw.replace(/;/g, ',').split(/[,\n]/)
+        .map((w: string) => w.trim().replace(NEGATION_PREFIXES, '').trim())
+        .filter(Boolean)
     : []
 
   return dishes.filter(dish => {
@@ -214,10 +224,11 @@ export function applyHardFilters(
     const pairing = dish.meal_pairing || ''
 
     // Dietary
-    if (['Vegetarian','Vegan','Jain'].includes(dietary) && !dish.is_vegetarian) return false
-    if (dietary === 'Eggetarian' && !dish.is_vegetarian) {
-      if (!['egg','anda','omelette','bhurji'].some(w => n.includes(w))) return false
-    }
+    // Check corpus mis-tags: some dishes are tagged is_vegetarian=true but contain eggs
+    const isActuallyEggDish = EGG_DISHES_MISTAGGED.has(n) ||
+      ['egg','anda','omelette','bhurji','shakshuka'].some(w => n.includes(w))
+    if (['Vegetarian','Vegan','Jain'].includes(dietary) && (!dish.is_vegetarian || isActuallyEggDish)) return false
+    if (dietary === 'Eggetarian' && !dish.is_vegetarian && !isActuallyEggDish) return false
 
     // Dislikes with synonym expansion
     for (const word of dislikeWords) {
@@ -235,6 +246,22 @@ export function applyHardFilters(
     // (They're still included in Discover searches)
     if (['Snack','Street Food'].includes(cType) &&
         ['standalone','as snack'].includes(pairing)) return false
+
+    // Cuisine preference filter (meal plan only — not applied in Discover)
+    // If user has explicit cuisine preferences, restrict to those + Indian cuisines
+    const cuisinePrefs: string[] = prefs.cuisine_prefs || []
+    if (cuisinePrefs.length > 0 && !prefs._allowAllCuisines) {
+      const ALWAYS_INCLUDE = ['Indian','North Indian','South Indian','Maharashtrian',
+        'Bengali','Punjabi','Gujarati','Rajasthani','Kerala','Hyderabadi','Mughlai',
+        'Street Food','Snack']
+      const isAlwaysIncluded = ALWAYS_INCLUDE.some(c =>
+        cType.toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(cType.toLowerCase())
+      )
+      const isInPrefs = cuisinePrefs.some(p =>
+        cType.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(cType.toLowerCase())
+      )
+      if (!isAlwaysIncluded && !isInPrefs && cType && cType !== '') return false
+    }
 
     return true
   })
