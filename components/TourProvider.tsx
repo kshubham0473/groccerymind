@@ -24,6 +24,15 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const [active, setActive]   = useState(false)
   const [stepIndex, setStepIndex] = useState(0)
 
+  // startTour must be declared before triggerIfNew which depends on it
+  const startTour = useCallback(() => {
+    setStepIndex(0)
+    setActive(true)
+    try { localStorage.setItem(TOUR_STEP_KEY, '0') } catch {}
+    const firstStep = TOUR_STEPS[0]
+    if (firstStep) router.push(firstStep.page)
+  }, [router])
+
   // triggerIfNew: called by the dashboard after auth is confirmed
   // Never auto-fires on login/onboarding pages
   const triggerIfNew = useCallback(() => {
@@ -34,14 +43,6 @@ export function TourProvider({ children }: { children: ReactNode }) {
       }
     } catch {}
   }, [startTour])
-
-  const startTour = useCallback(() => {
-    setStepIndex(0)
-    setActive(true)
-    try { localStorage.setItem(TOUR_STEP_KEY, '0') } catch {}
-    const firstStep = TOUR_STEPS[0]
-    if (firstStep) router.push(firstStep.page)
-  }, [router])
 
   const nextStep = useCallback(() => {
     const next = stepIndex + 1
