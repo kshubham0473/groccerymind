@@ -131,7 +131,17 @@ export async function GET(req: NextRequest) {
   }
 
   // Step 1: Semantic search in corpus (with optional pantry-only filter)
-  const candidates = await searchCorpusForDiscover(userPrompt, prefs, dislikedDishNames, pantryItems, 15, pantryOnly)
+  let candidates = await searchCorpusForDiscover(userPrompt, prefs, dislikedDishNames, pantryItems, 15)
+  
+  // Apply pantry-only filter if requested
+  if (pantryOnly && pantryItems.length > 0) {
+    const pantrySet = new Set(pantryItems.map(p => p.toLowerCase()))
+    candidates = candidates.filter(d => {
+      const dishIngredients = d.name.toLowerCase()
+      return [...pantrySet].some(p => dishIngredients.includes(p))
+    })
+  }
+  
   if (!candidates.length) {
     return NextResponse.json({ dishes: [], message: pantryOnly
       ? 'Not enough pantry matches found. Try turning off pantry filter.'
