@@ -340,8 +340,6 @@ export async function searchCorpusForDiscover(
   nCandidates = 15
 ): Promise<CorpusDish[]> {
   const corpus = loadFullCorpus()
-  // For discover, include snacks/street food too (user might want them)
-  // (filtered var removed — allFiltered below handles dietary/dislikes for discover)
   const allFiltered = corpus.filter(d => {
     const dietary = prefs.dietary || ''
     if (['Vegetarian','Vegan','Jain'].includes(dietary) && !d.is_vegetarian) return false
@@ -445,7 +443,6 @@ export async function getMoodNudge(context: {
   const festivalLine = festival ? `Today is ${festival} — a great reason to cook something special!` : ''
   const nameLine = context.userName ? `The user's name is ${context.userName}.` : ''
 
-  // Rotate personality styles — picked fresh each call for variety
   const personalities = [
     'cheeky and witty — use a food pun or clever wordplay',
     'warm and encouraging like a caring auntie',
@@ -488,15 +485,17 @@ Return ONLY valid JSON, no markdown:
 export async function getOrderSuggestions(context: {
   currentOrderItems: string[]
   lowPantryItems: { name: string; tier: string; daysSinceOrder: number }[]
+  goodPantryItems?: string[]
   upcomingMeals: string[]
   householdContext?: string
 }): Promise<{ item: string; reason: string }[]> {
   const prompt = `You are a smart Indian household grocery assistant.
 Already in order list: ${context.currentOrderItems.join(', ') || 'none'}
-Low pantry items: ${context.lowPantryItems.map(i => `${i.name} (${i.daysSinceOrder}d since restock)`).join(', ') || 'none'}
+Low/out-of-stock pantry items: ${context.lowPantryItems.map(i => `${i.name} (${i.daysSinceOrder}d since restock)`).join(', ') || 'none'}
+${context.goodPantryItems?.length ? `Well-stocked items (do NOT suggest these): ${context.goodPantryItems.slice(0, 20).join(', ')}` : ''}
 Upcoming meals: ${context.upcomingMeals.join(', ') || 'none'}
 ${context.householdContext || ''}
-Suggest up to 5 items to add. Do NOT suggest items already in the order list. Do NOT suggest spices or salt or oil.
+Suggest up to 5 items to add. Do NOT suggest items already in the order list or well-stocked items. Do NOT suggest spices or salt or oil.
 Return ONLY a JSON array, no markdown:
 [{"item": "name", "reason": "short reason"}]`
   try {
