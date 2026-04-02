@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
-import { searchCorpusForDiscover, buildHouseholdContext, buildLearningContext, parseIngredients, callGeminiRaw, cleanJson } from '@/lib/gemini'
+import { searchCorpusForDiscover, buildHouseholdContext, parseIngredients, callGeminiRaw, cleanJson } from '@/lib/gemini'
 
 export const maxDuration = 60
 
@@ -141,7 +141,20 @@ export async function GET(req: NextRequest) {
 
   // Step 2: Gemini ranks top 3 — injecting both household prefs AND learned patterns
   const householdContext = buildHouseholdContext(prefs, feedback)
-  const learningContext  = buildLearningContext(feedback, recentlyCooked, lockedPatterns)
+  
+  // Build learning context from behaviour patterns
+  const learningParts: string[] = []
+  if (recentlyCooked.length > 0) {
+    learningParts.push(`Recently cooked: ${recentlyCooked.slice(0, 5).join(', ')}`)
+  }
+  const slotPrefs: Record<string, string[]> = { lunch: [], dinner: [] }
+  for (const p of lockedPatterns) {
+    if (slotPrefs[p.slot]) slotPrefs[p.slot].push(p.dish_name)
+  }
+  if (slotPrefs.lunch.length > 0) learningParts.push(`Lunch preferences: ${[...new Set(slotPrefs.lunch)].slice(0, 3).join(', ')}`)
+  if (slotPrefs.dinner.length > 0) learningParts.push(`Dinner preferences: ${[...new Set(slotPrefs.dinner)].slice(0, 3).join(', ')}`)
+  const learningContext = learningParts.length > 0 ? learningParts.join('\n') : ''
+  
   const candidateList    = candidates.map((d: any, i: number) =>
     `${i+1}. ${d.name} (${d.cuisine_type || 'Indian'}, ${d.complexity || 'moderate'}, pairing: ${d.meal_pairing || 'varies'})`
   ).join('\n')
