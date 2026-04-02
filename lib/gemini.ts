@@ -201,6 +201,9 @@ export async function getStarterDishes(context: {
   householdContext: string
   prefs?: Record<string, any>
 }): Promise<any[]> {
+  // Declare prefs first — must be before any use (fixes TS build error)
+  const prefs = context.prefs || {}
+
   const corpus = loadFullCorpus()
   if (!corpus.length) return []
 
@@ -209,7 +212,6 @@ export async function getStarterDishes(context: {
 
   // Step 1: Gemini freely names 50 dishes for this household
   // Build explicit dietary + cuisine constraints for the prompt
-  const prefs = context.prefs || {}
   const dietary = prefs.dietary || 'No restrictions'
   const cuisinePrefs: string[] = prefs.cuisine_prefs || []
   const dislikesText = prefs.dislikes ? `Hard avoids (never include): ${prefs.dislikes}` : ''
