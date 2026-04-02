@@ -173,6 +173,7 @@ export default function Dashboard() {
   const [moodNudge, setMoodNudge] = useState<{ message: string; chips: string[] } | null>(null)
   const [moodNudgeDismissed, setMoodNudgeDismissed] = useState(true)
   const [moodNudgeLoading, setMoodNudgeLoading] = useState(false)
+  const [moodNudgeExpanded, setMoodNudgeExpanded] = useState(false)
 
   const today = getTodayKey()
   const hour = new Date().getHours()
@@ -209,9 +210,7 @@ export default function Dashboard() {
       if (Array.isArray(d)) setInsight(computeInsight(d))
     }).catch(() => {})
 
-    const { triggerIfNew } = useTour()
-
-  // Mood nudge
+    // Mood nudge
     const cached = getMoodNudgeCache()
     if (cached) {
       setMoodNudge(cached.data)
@@ -283,41 +282,6 @@ export default function Dashboard() {
 
       <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* ── Mood nudge ── */}
-        {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
-          <div style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)', padding: 16, position: 'relative' }}>
-            <button onClick={dismissMoodNudge} style={{ position: 'absolute', top: 10, right: 12, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18, lineHeight: 1, zIndex: 2 }}>×</button>
-            {moodNudgeLoading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div className="skeleton" style={{ height: 11, width: '70%', opacity: 0.3 }} />
-                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 32, width: 80, borderRadius: 99, opacity: 0.2 }} />)}
-                </div>
-              </div>
-            ) : moodNudge && (
-              <>
-                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, marginBottom: 12, paddingRight: 20 }}>
-                  {moodNudge.message}
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {moodNudge.chips.map(chip => (
-                    <button key={chip} onClick={() => handleMoodChip(chip)} style={{
-                      padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
-                      background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer'
-                    }}>{chip}</button>
-                  ))}
-                  <button onClick={() => { dismissMoodNudge(); router.push('/discover') }} style={{
-                    padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
-                    background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)',
-                    fontSize: 13, cursor: 'pointer'
-                  }}>Explore all →</button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
         {/* ── Today's Decision ── */}
         <div className="card" data-tour="todays-decision" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -328,6 +292,13 @@ export default function Dashboard() {
             <a href="/meal-plan" style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 600, textDecoration: 'none' }}>Change →</a>
           </div>
           <div style={{ padding: 14 }}>
+            {!lunchLock && !dinnerLock && (lunch.length > 0 || dinner.length > 0) ? (
+              <a href="/meal-plan" style={{
+                display: 'block', textAlign: 'center', padding: '14px 20px',
+                borderRadius: 12, background: 'var(--green-deep)', color: 'white',
+                fontSize: 15, fontWeight: 600, textDecoration: 'none', marginBottom: 10
+              }}>Plan today →</a>
+            ) : null}
             {[{ slot: 'lunch', label: '☀️ Lunch', lock: lunchLock, options: lunch },
               { slot: 'dinner', label: '🌙 Dinner', lock: dinnerLock, options: dinner }
             ].map(({ slot, label, lock, options }) => (
@@ -337,7 +308,6 @@ export default function Dashboard() {
                   {lock ? (
                     <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)', margin: '3px 0 0' }}>{lock.dish_name}</p>
                   ) : options.length > 0 ? (
-                    // Show dish names instead of "N options — not locked"
                     <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '3px 0 0' }}>
                       {options.slice(0, 2).map((s: any) => s.dish?.name).filter(Boolean).join(', ')}
                       {options.length > 2 && <span style={{ color: 'var(--text-muted)', opacity: 0.6 }}> +{options.length - 2}</span>}
@@ -361,19 +331,43 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Household insight card ── */}
-        {insight && (
-          <div data-tour="insight-card" style={{
-            borderRadius: 16, padding: '14px 16px',
-            background: 'white', border: '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', gap: 14,
-            boxShadow: 'var(--shadow)'
-          }}>
-            <span style={{ fontSize: 28, flexShrink: 0 }}>{insight.emoji}</span>
-            <div style={{ minWidth: 0 }}>
-              <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{insight.headline}</p>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>{insight.subline}</p>
-            </div>
+        {/* ── Mood nudge (collapsed single-line) ── */}
+        {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
+          <div style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)', padding: moodNudgeExpanded ? 16 : '10px 16px', position: 'relative', cursor: moodNudgeExpanded ? 'default' : 'pointer' }} onClick={() => !moodNudgeExpanded && !moodNudgeLoading && setMoodNudgeExpanded(true)}>
+            <button onClick={(e) => { e.stopPropagation(); dismissMoodNudge() }} style={{ position: 'absolute', top: moodNudgeExpanded ? 10 : 8, right: 12, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18, lineHeight: 1, zIndex: 2 }}>×</button>
+            {moodNudgeLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="skeleton" style={{ height: 11, width: '70%', opacity: 0.3 }} />
+              </div>
+            ) : moodNudge && (
+              <>
+                {!moodNudgeExpanded ? (
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.4, margin: 0, paddingRight: 24, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {moodNudge.message}
+                  </p>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, marginBottom: 12, paddingRight: 20 }}>
+                      {moodNudge.message}
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {moodNudge.chips.map(chip => (
+                        <button key={chip} onClick={() => handleMoodChip(chip)} style={{
+                          padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
+                          background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                        }}>{chip}</button>
+                      ))}
+                      <button onClick={() => { dismissMoodNudge(); router.push('/discover') }} style={{
+                        padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
+                        background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)',
+                        fontSize: 13, cursor: 'pointer'
+                      }}>Explore all →</button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -406,7 +400,7 @@ export default function Dashboard() {
 
         {/* ── Pantry alerts ── */}
         {lowItems.length > 0 && (
-          <div className="card" style={{ overflow: 'hidden', borderLeft: '3px solid var(--amber)' }}>
+          <div className="card" style={{ overflow: 'hidden', background: 'rgba(217, 119, 6, 0.04)' }}>
             <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>⚠️</span>
               <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--amber)' }}>Pantry Alerts · {lowItems.length}</span>
@@ -422,6 +416,22 @@ export default function Dashboard() {
                   <button onClick={() => addToOrder(item.name)} style={{ background: 'var(--green-light)', color: 'var(--green-deep)', border: 'none', padding: '5px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ Order</button>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Household insight card ── */}
+        {insight && (
+          <div data-tour="insight-card" style={{
+            borderRadius: 16, padding: '14px 16px',
+            background: 'white', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', gap: 14,
+            boxShadow: 'var(--shadow)'
+          }}>
+            <span style={{ fontSize: 28, flexShrink: 0 }}>{insight.emoji}</span>
+            <div style={{ minWidth: 0 }}>
+              <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{insight.headline}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>{insight.subline}</p>
             </div>
           </div>
         )}
