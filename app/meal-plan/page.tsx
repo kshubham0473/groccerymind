@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DailyLock } from '@/types'
 
@@ -32,18 +32,11 @@ function LockSheet({ slot, label, dayName, date, allSlots, locks, onLock, onClos
   const [manualDish, setManualDish] = useState('')
   const [otherDay, setOtherDay] = useState('')
 
-  // Dishes on this day/slot from weekly plan
   const thisDayOptions = allSlots
     .filter(s => s.day === dayName && s.slot === slot)
     .map(s => s.dish)
     .filter(Boolean)
 
-  // All unique dishes across the whole meal plan (for "other day" picker)
-  const allDishes = Array.from(
-    new Map(allSlots.map(s => [s.dish?.name, s.dish])).values()
-  ).filter(Boolean) as any[]
-
-  // Dishes from a specific other day
   const otherDayDishes = otherDay
     ? allSlots.filter(s => s.day === otherDay && s.slot === slot).map(s => s.dish).filter(Boolean)
     : []
@@ -56,20 +49,17 @@ function LockSheet({ slot, label, dayName, date, allSlots, locks, onLock, onClos
         padding: '20px 20px 40px', maxHeight: '85vh',
         display: 'flex', flexDirection: 'column'
       }}>
-        {/* Handle */}
         <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
 
         {mode === 'choose' && (
           <>
             <p className="font-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>
-              🔒 Lock {label}
+              Lock {label}
             </p>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18 }}>
               {new Date(date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
             </p>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Option 1 — This week's menu */}
               <button onClick={() => setMode('thisDay')} style={{
                 padding: '14px 16px', borderRadius: 14, border: '1.5px solid var(--border)',
                 background: 'white', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12
@@ -83,8 +73,6 @@ function LockSheet({ slot, label, dayName, date, allSlots, locks, onLock, onClos
                 </div>
                 <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>›</span>
               </button>
-
-              {/* Option 2 — Another day's menu */}
               <button onClick={() => setMode('otherDay')} style={{
                 padding: '14px 16px', borderRadius: 14, border: '1.5px solid var(--border)',
                 background: 'white', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12
@@ -96,8 +84,6 @@ function LockSheet({ slot, label, dayName, date, allSlots, locks, onLock, onClos
                 </div>
                 <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>›</span>
               </button>
-
-              {/* Option 3 — Discover */}
               <button onClick={() => {
                 onClose()
                 router.push(`/discover?lockSlot=${slot}&lockDate=${date}`)
@@ -112,8 +98,6 @@ function LockSheet({ slot, label, dayName, date, allSlots, locks, onLock, onClos
                 </div>
                 <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>›</span>
               </button>
-
-              {/* Option 4 — Manual */}
               <button onClick={() => setMode('manual')} style={{
                 padding: '14px 16px', borderRadius: 14, border: '1.5px solid var(--border)',
                 background: 'white', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12
@@ -206,9 +190,60 @@ function LockSheet({ slot, label, dayName, date, allSlots, locks, onLock, onClos
               background: manualDish.trim() ? 'var(--green-mid)' : 'var(--border)',
               color: manualDish.trim() ? 'white' : 'var(--text-muted)',
               fontSize: 14, fontWeight: 700, cursor: 'pointer'
-            }}>🔒 Lock this dish</button>
+            }}>Lock this dish</button>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+
+// ── Dish action sheet (tap dish name → recipe + edit) ─────────────────────────
+function DishActionSheet({ dish, onEdit, onClose }: {
+  dish: any
+  onEdit: () => void
+  onClose: () => void
+}) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 430, margin: '0 auto',
+        background: 'white', borderRadius: '24px 24px 0 0',
+        padding: '20px 20px 40px',
+      }}>
+        <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 18px' }} />
+        <p className="font-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>{dish.name}</p>
+        {dish.meal_pairing && (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, fontStyle: 'italic' }}>{dish.meal_pairing}</p>
+        )}
+        {!dish.meal_pairing && <div style={{ marginBottom: 18 }} />}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {dish.youtube_url && (
+            <a href={dish.youtube_url} target="_blank" rel="noopener noreferrer" style={{
+              padding: '14px 16px', borderRadius: 14, border: '1.5px solid var(--border)',
+              background: 'white', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 12
+            }}>
+              <span style={{ fontSize: 22 }}>▶</span>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Watch recipe</p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Opens YouTube</p>
+              </div>
+              <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>›</span>
+            </a>
+          )}
+          <button onClick={() => { onEdit(); onClose() }} style={{
+            padding: '14px 16px', borderRadius: 14, border: '1.5px solid var(--border)',
+            background: 'white', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12
+          }}>
+            <span style={{ fontSize: 22 }}>✎</span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Edit dish</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Change name, pairing or recipe link</p>
+            </div>
+            <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>›</span>
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -250,21 +285,18 @@ function DishEditSheet({ dish, onSave, onClose }: {
       }}>
         <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 18px' }} />
         <p className="font-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 18 }}>Edit dish</p>
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Dish name</label>
             <input value={name} onChange={e => setName(e.target.value)}
               style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 15, outline: 'none', fontFamily: 'inherit' }} />
           </div>
-
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Meal pairing</label>
             <input value={pairing} onChange={e => setPairing(e.target.value)}
               placeholder="e.g. with Steamed Rice, with Roti, standalone"
               style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
           </div>
-
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>
               YouTube recipe link
@@ -280,9 +312,7 @@ function DishEditSheet({ dish, onSave, onClose }: {
             )}
           </div>
         </div>
-
         {error && <p style={{ fontSize: 13, color: 'var(--red)', marginTop: 10 }}>{error}</p>}
-
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
           <button onClick={save} disabled={saving} style={{
             flex: 1, padding: '13px', borderRadius: 12, border: 'none',
@@ -312,6 +342,7 @@ export default function MealPlanPage() {
   const [parsedIngredients, setParsedIngredients] = useState<string[]>([])
   const [lockSheet, setLockSheet] = useState<{ slot: string; label: string }|null>(null)
   const [editingDish, setEditingDish] = useState<any>(null)
+  const [actionDish, setActionDish] = useState<any>(null)
   const todayName = getTodayDayName()
 
   useEffect(() => {
@@ -376,7 +407,6 @@ export default function MealPlanPage() {
   }
 
   function handleDishSaved(updated: any) {
-    // Update all slots that reference this dish
     setSlots(p => p.map(s => s.dish?.id === updated.id ? { ...s, dish: { ...s.dish, ...updated } } : s))
     setEditingDish(null)
   }
@@ -394,7 +424,7 @@ export default function MealPlanPage() {
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Weekly Menu</p>
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Meal Plan</h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 4 }}>Tap 🔒 to decide what you're making</p>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 4 }}>Tap a dish name for options · Choose → to lock</p>
         </div>
       </div>
 
@@ -406,6 +436,8 @@ export default function MealPlanPage() {
             const dayLocks = locks.filter(l => l.lock_date === date)
             const isToday = day === todayName
             const active = day === selectedDay
+            const fullyLocked = dayLocks.length >= 2
+            const partiallyLocked = dayLocks.length === 1
             return (
               <button key={day} onClick={() => setSelectedDay(day)} style={{
                 flexShrink: 0, minWidth: 58, padding: '8px 10px', borderRadius: 12, border: 'none', cursor: 'pointer',
@@ -415,12 +447,18 @@ export default function MealPlanPage() {
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3
               }}>
                 <span style={{ fontSize: 12, fontWeight: 700 }}>{SHORT[day]}</span>
-                <span style={{ fontSize: 10, opacity: 0.7 }}>{isToday ? 'today' : ''}</span>
-                {dayLocks.length > 0 && (
-                  <span style={{ fontSize: 10, color: active ? 'rgba(255,255,255,0.8)' : 'var(--green-soft)', fontWeight: 700 }}>
-                    {'🔒'.repeat(dayLocks.length)}
-                  </span>
-                )}
+                <span style={{ fontSize: 10, opacity: 0.7 }}>{isToday ? 'today' : '\u00A0'}</span>
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%', display: 'block',
+                  background: fullyLocked
+                    ? (active ? 'rgba(255,255,255,0.9)' : 'var(--green-soft)')
+                    : partiallyLocked
+                      ? (active ? 'rgba(255,255,255,0.4)' : 'var(--green-light)')
+                      : 'transparent',
+                  border: partiallyLocked && !fullyLocked
+                    ? (active ? 'none' : '1.5px solid var(--green-soft)')
+                    : 'none',
+                }} />
               </button>
             )
           })}
@@ -443,43 +481,40 @@ export default function MealPlanPage() {
 
           return (
             <div key={key} className="card" data-tour="meal-slot" style={{ marginBottom: 14, overflow: 'hidden' }}>
-              {/* Slot header */}
-              <div style={{ padding: '11px 14px', background: bg, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{label}</span>
+              {/* Slot header: green tint when locked, slot colour when not */}
+              <div style={{
+                padding: '11px 14px',
+                background: lock ? 'var(--green-light)' : bg,
+                borderBottom: `1px solid ${lock ? 'var(--green-soft)' : 'var(--border)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                transition: 'background 0.25s',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, marginRight: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: lock ? 'var(--green-deep)' : 'var(--text-primary)', flexShrink: 0 }}>{label}</span>
+                  {lock && (
+                    <span className="font-display" style={{
+                      fontSize: 13, fontWeight: 700, color: 'var(--green-deep)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>
+                      · {lock.dish_name}
+                    </span>
+                  )}
+                </div>
                 {!lock ? (
                   <button onClick={() => setLockSheet({ slot: key, label })} style={{
                     display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px',
                     borderRadius: 99, border: 'none', background: 'var(--green-mid)', color: 'white',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0
                   }}>Choose →</button>
                 ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-deep)' }}>
-                      🔒 {lock.dish_name}
-                    </span>
-                    {/* Unlock is right next to the locked name — labelled clearly */}
-                    <button onClick={() => unlockMeal(key)} style={{
-                      padding: '3px 10px', borderRadius: 99, border: '1px solid var(--green-soft)',
-                      background: 'white', fontSize: 11, fontWeight: 600, color: 'var(--green-mid)', cursor: 'pointer'
-                    }}>Unlock</button>
-                  </div>
+                  <button onClick={() => unlockMeal(key)} style={{
+                    padding: '3px 10px', borderRadius: 99, border: '1px solid var(--green-soft)',
+                    background: 'white', fontSize: 11, fontWeight: 600, color: 'var(--green-mid)', cursor: 'pointer', flexShrink: 0
+                  }}>Unlock</button>
                 )}
               </div>
 
-              {/* Locked confirmation banner */}
-              {lock && (
-                <div style={{ padding: '10px 14px', background: 'var(--green-light)', borderBottom: '1px solid var(--green-soft)' }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--green-deep)', margin: 0 }}>
-                    Confirmed: {lock.dish_name}
-                  </p>
-                  <p style={{ fontSize: 11, color: 'var(--green-mid)', margin: '2px 0 0' }}>
-                    Locked by {lock.locked_by_username}
-                  </p>
-                </div>
-              )}
-
               <div style={{ padding: 12 }}>
-                {/* Options list */}
                 {items.length === 0 ? (
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>No options yet</p>
                 ) : (
@@ -494,52 +529,34 @@ export default function MealPlanPage() {
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                         }}>
                           <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
-                            <p className="font-display" onClick={() => setEditingDish(s.dish)} style={{ fontSize: 14, fontWeight: 600, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>
-                              {isLocked ? '🔒 ' : ''}{s.dish?.name}
+                            <p
+                              className="font-display"
+                              onClick={() => setActionDish(s.dish)}
+                              style={{
+                                fontSize: 14, fontWeight: 600, margin: 0,
+                                cursor: 'pointer',
+                                textDecoration: 'underline dotted',
+                                textDecorationColor: 'var(--border)',
+                              }}
+                            >
+                              {s.dish?.name}
                             </p>
-                            {(s.dish?.meal_pairing || s.dish?.ingredients?.length > 0) && (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                                {s.dish?.meal_pairing && (
-                                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>{s.dish.meal_pairing}</span>
-                                )}
-                                {!s.dish?.meal_pairing && s.dish?.ingredients?.slice(0, 3).map((ing: any) => (
-                                  <span key={typeof ing === 'string' ? ing : ing.name} className="pill badge-good" style={{ fontSize: 10 }}>
-                                    {typeof ing === 'string' ? ing : ing.name}
-                                  </span>
-                                ))}
-                              </div>
+                            {s.dish?.meal_pairing && (
+                              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '3px 0 0', fontStyle: 'italic' }}>
+                                {s.dish.meal_pairing}
+                              </p>
                             )}
                           </div>
-                          <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
-                            {s.dish?.youtube_url && (
-                              <a href={s.dish.youtube_url} target="_blank" rel="noopener noreferrer" style={{
-                                padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)',
-                                background: 'white', fontSize: 13, textDecoration: 'none', lineHeight: 1
-                              }} title="Watch recipe">▶</a>
-                            )}
-                            <button onClick={() => setEditingDish(s.dish)} style={{
-                              padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)',
-                              background: 'white', fontSize: 12, cursor: 'pointer', color: 'var(--text-muted)'
-                            }} title="Edit dish">✎</button>
-                            {!lock && (
-                              <button onClick={() => lockMeal(key, s.dish?.name, s.dish?.id)} style={{
-                                padding: '5px 10px', borderRadius: 8, border: 'none',
-                                background: 'var(--green-light)', color: 'var(--green-deep)',
-                                fontSize: 11, fontWeight: 700, cursor: 'pointer'
-                              }}>🔒</button>
-                            )}
-                            <button onClick={() => removeSlot(s.id)} style={{
-                              background: 'none', border: 'none', color: 'var(--text-muted)',
-                              cursor: 'pointer', fontSize: 16, padding: '0 2px'
-                            }}>×</button>
-                          </div>
+                          <button onClick={() => removeSlot(s.id)} style={{
+                            background: 'none', border: 'none', color: 'var(--text-muted)',
+                            cursor: 'pointer', fontSize: 16, padding: '0 2px', flexShrink: 0
+                          }}>×</button>
                         </div>
                       )
                     })}
                   </div>
                 )}
 
-                {/* Add to weekly plan */}
                 {adding?.day === selectedDay && adding?.slot === key ? (
                   <div style={{ marginTop: 4 }}>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -580,6 +597,15 @@ export default function MealPlanPage() {
           )
         })}
       </div>
+
+      {/* Dish action sheet */}
+      {actionDish && (
+        <DishActionSheet
+          dish={actionDish}
+          onEdit={() => setEditingDish(actionDish)}
+          onClose={() => setActionDish(null)}
+        />
+      )}
 
       {/* Dish edit sheet */}
       {editingDish && (
