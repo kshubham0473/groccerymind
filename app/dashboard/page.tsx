@@ -287,7 +287,7 @@ export default function Dashboard() {
           <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>🔒</span>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>Today's Decision</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-secondary)' }}>Today's Decision</span>
             </div>
             <a href="/meal-plan" style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 600, textDecoration: 'none' }}>Change →</a>
           </div>
@@ -306,7 +306,7 @@ export default function Dashboard() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, margin: 0 }}>{label}</p>
                   {lock ? (
-                    <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)', margin: '3px 0 0' }}>{lock.dish_name}</p>
+                    <p className="font-display" style={{ fontSize: 16, fontWeight: 600, color: 'var(--green-deep)', margin: '3px 0 0' }}>{lock.dish_name}</p>
                   ) : options.length > 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '3px 0 0' }}>
                       {options.slice(0, 2).map((s: any) => s.dish?.name).filter(Boolean).join(', ')}
@@ -377,7 +377,7 @@ export default function Dashboard() {
             <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span>🛒</span>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>Order List</span>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-secondary)' }}>Order List</span>
                 {orders.length > 0 && <span className="pill badge-low" style={{ fontSize: 11 }}>{orders.length}</span>}
               </div>
               <span style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 600 }}>View →</span>
