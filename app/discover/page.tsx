@@ -51,11 +51,10 @@ function DiscoverContent() {
   const [pickingDay, setPickingDay] = useState<string|null>(null)
   const [saving, setSaving] = useState(false)
   const [editingDish, setEditingDish] = useState<Dish|null>(null)
-
-  // Pantry-only toggle
   const [pantryOnly, setPantryOnly] = useState(false)
-  // Per-dish "fetch ingredients" loading state
   const [fetchingIngredients, setFetchingIngredients] = useState<string|null>(null)
+  // Stable random prompts — generated once per mount
+  const [promptChips] = useState(() => getRandomPrompts())
 
   useEffect(() => {
     const urlPrompt = searchParams.get('prompt')
@@ -68,14 +67,14 @@ function DiscoverContent() {
   }, [])
 
   async function handleGenerate(overridePrompt?: string, usePantryOnly?: boolean) {
-    const usePrompt    = (overridePrompt ?? prompt).trim()
-    const useFilter    = usePantryOnly ?? pantryOnly
+    const usePrompt = (overridePrompt ?? prompt).trim()
+    const useFilter = usePantryOnly ?? pantryOnly
     setLoading(true); setDishes([]); setErrorMsg(''); setGenerated(false)
     try {
       let url = '/api/suggest/dish'
       const params = new URLSearchParams()
-      if (usePrompt)  params.set('prompt', usePrompt)
-      if (useFilter)  params.set('pantry_only', '1')
+      if (usePrompt) params.set('prompt', usePrompt)
+      if (useFilter) params.set('pantry_only', '1')
       if (params.toString()) url += '?' + params.toString()
       const res = await fetch(url)
       const d = await res.json()
@@ -90,7 +89,6 @@ function DiscoverContent() {
     } finally { setLoading(false) }
   }
 
-  // Fetch what a dish needs to buy (called lazily when user wants to order)
   async function fetchNeedsToBuy(dish: Dish): Promise<string[]> {
     if (dish.needsToBuy.length > 0) return dish.needsToBuy
     setFetchingIngredients(dish.name)
@@ -101,11 +99,9 @@ function DiscoverContent() {
       })
       const d = await res.json()
       const ingredients: string[] = d.ingredients || []
-      // Filter out items already in pantry
       const notInPantry = ingredients.filter(ing =>
         !dish.usesFromPantry.some(p => p.toLowerCase() === ing.toLowerCase())
       )
-      // Update dish in state
       setDishes(prev => prev.map(d =>
         d.name === dish.name ? { ...d, needsToBuy: notInPantry } : d
       ))
@@ -164,7 +160,6 @@ function DiscoverContent() {
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
-      {/* Header */}
       <div className="page-header">
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Kitchen Discovery</p>
@@ -179,6 +174,50 @@ function DiscoverContent() {
 
         {/* ── Chatbox ── */}
         <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+
+          {/* Segmented pantry toggle — sits above the input */}
+          <div
+            data-tour="pantry-toggle"
+            style={{
+              display: 'flex', alignItems: 'center',
+              background: 'var(--cream)', borderRadius: 10,
+              padding: 3, marginBottom: 10,
+              border: '1px solid var(--border)',
+              width: 'fit-content',
+            }}
+          >
+            <button
+              onClick={() => {
+                if (pantryOnly) { setPantryOnly(false); if (generated) handleGenerate(undefined, false) }
+              }}
+              style={{
+                padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 700,
+                background: !pantryOnly ? 'white' : 'transparent',
+                color: !pantryOnly ? 'var(--green-deep)' : 'var(--text-muted)',
+                boxShadow: !pantryOnly ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            >
+              Anything
+            </button>
+            <button
+              onClick={() => {
+                if (!pantryOnly) { setPantryOnly(true); if (generated) handleGenerate(undefined, true) }
+              }}
+              style={{
+                padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 700,
+                background: pantryOnly ? 'white' : 'transparent',
+                color: pantryOnly ? 'var(--green-deep)' : 'var(--text-muted)',
+                boxShadow: pantryOnly ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            >
+              🧺 From pantry
+            </button>
+          </div>
+
           <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 10 }}>
             What are you in the mood for?
           </p>
@@ -201,42 +240,17 @@ function DiscoverContent() {
             )}
           </div>
 
-          {/* Pantry-only toggle + example prompt chips */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {/* Pantry toggle chip */}
-            <button
-              data-tour="pantry-toggle"
-              onClick={() => {
-                const next = !pantryOnly
-                setPantryOnly(next)
-                if (generated) handleGenerate(undefined, next)
-              }}
-              style={{
-                padding: '5px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700,
-                border: '1.5px solid',
-                borderColor: pantryOnly ? 'var(--green-mid)' : 'var(--border)',
-                background: pantryOnly ? 'var(--green-light)' : 'white',
-                color: pantryOnly ? 'var(--green-deep)' : 'var(--text-muted)',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
-              }}
-            >
-              🧺 {pantryOnly ? 'Pantry only' : 'Pantry only'}
-            </button>
-
-            {/* Example prompt chips — only shown before first generation */}
-            {!generated && getRandomPrompts().map(ex => (
-              <button key={ex} onClick={() => { setPrompt(ex); setTimeout(() => inputRef.current?.focus(), 50) }} style={{
-                padding: '5px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500,
-                border: '1px solid var(--border)', background: 'white',
-                color: 'var(--text-secondary)', cursor: 'pointer'
-              }}>{ex}</button>
-            ))}
-          </div>
-
-          {pantryOnly && (
-            <p style={{ fontSize: 11, color: 'var(--green-mid)', fontWeight: 600, marginBottom: 8 }}>
-              🧺 Showing dishes you can make from what's in your pantry
-            </p>
+          {/* Example prompt chips — only shown before first generation */}
+          {!generated && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {promptChips.map(ex => (
+                <button key={ex} onClick={() => { setPrompt(ex); setTimeout(() => inputRef.current?.focus(), 50) }} style={{
+                  padding: '5px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500,
+                  border: '1px solid var(--border)', background: 'white',
+                  color: 'var(--text-secondary)', cursor: 'pointer'
+                }}>{ex}</button>
+              ))}
+            </div>
           )}
 
           <button onClick={() => handleGenerate()} disabled={loading} style={{
@@ -282,12 +296,15 @@ function DiscoverContent() {
           const isLiked = fb === 'like'
           const addedT = addedToday.has(dish.name)
           const addedM = addedMain.has(dish.name)
-          const allOrdersAdded = dish.needsToBuy.length > 0 && dish.needsToBuy.every(i => addedOrders.has(i))
           const isFetchingThis = fetchingIngredients === dish.name
+          // Order button: only visible when needsToBuy > 0
+          const hasItemsToBuy = dish.needsToBuy.length > 0
+          const allOrdersAdded = hasItemsToBuy && dish.needsToBuy.every(i => addedOrders.has(i))
 
           return (
             <div key={dish.name} className="card fade-up" style={{ marginBottom: 12, overflow: 'hidden', opacity: isDisliked ? 0.4 : 1, transition: 'opacity 0.3s' }}>
-              {/* Card header row */}
+
+              {/* ── Zone 1: Header row — mood tag + prep time + feedback ── */}
               <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: mood.bg, color: mood.color }}>{dish.mood}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -303,8 +320,9 @@ function DiscoverContent() {
                 </div>
               </div>
 
-              <div style={{ padding: 14 }}>
-                {/* Dish name + YouTube + edit */}
+              {/* ── Zone 2: Body — name, description, ingredient tags ── */}
+              <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+                {/* Dish name + recipe/edit buttons */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
                   <p className="font-display" onClick={() => setEditingDish(dish)} style={{ fontSize: 16, fontWeight: 700, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>{dish.name}</p>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -321,11 +339,11 @@ function DiscoverContent() {
                   </div>
                 </div>
 
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: 12, lineHeight: 1.5 }}>{dish.description}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic', margin: '0 0 12px', lineHeight: 1.5 }}>{dish.description}</p>
 
-                {/* From pantry */}
+                {/* From pantry — always render zone, height collapses naturally when empty */}
                 {dish.usesFromPantry.length > 0 && (
-                  <div style={{ marginBottom: 10 }}>
+                  <div style={{ marginBottom: dish.needsToBuy.length > 0 ? 10 : 0 }}>
                     <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-mid)', marginBottom: 6 }}>✅ From pantry</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                       {dish.usesFromPantry.map(ing => (
@@ -335,9 +353,9 @@ function DiscoverContent() {
                   </div>
                 )}
 
-                {/* Need to buy — shown after fetching */}
+                {/* Need to buy — only rendered when populated */}
                 {dish.needsToBuy.length > 0 && (
-                  <div style={{ marginBottom: 12 }}>
+                  <div>
                     <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 6 }}>🛒 Need to order</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                       {dish.needsToBuy.map(ing => (
@@ -346,9 +364,12 @@ function DiscoverContent() {
                     </div>
                   </div>
                 )}
+              </div>
 
+              {/* ── Zone 3: Action row ── */}
+              <div style={{ padding: '10px 14px' }}>
                 {isDisliked ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '4px 0' }}>Marked as disliked · won't suggest again</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '4px 0', margin: 0 }}>Marked as disliked · won't suggest again</p>
                 ) : (
                   <div style={{ display: 'flex', gap: 8 }}>
                     {isLockMode ? (
@@ -385,20 +406,24 @@ function DiscoverContent() {
                       }}>📅 Add to plan</button>
                     )}
 
-                    {/* Order missing ingredients button — lazy fetches on first tap */}
-                    {!isLockMode && (
+                    {/* Order missing — only shown when there are items to buy, hidden when 0 */}
+                    {!isLockMode && hasItemsToBuy && (
                       <button
-                        onClick={() => handleOrderMissing(dish)}
-                        disabled={isFetchingThis || allOrdersAdded}
+                        onClick={() => !allOrdersAdded && handleOrderMissing(dish)}
+                        disabled={isFetchingThis}
                         style={{
-                          padding: '9px 14px', borderRadius: 10, border: '1px solid var(--border)',
+                          padding: '9px 14px', borderRadius: 10,
+                          border: '1px solid var(--border)',
                           background: allOrdersAdded ? 'var(--green-pale)' : 'white',
-                          fontSize: 13, cursor: isFetchingThis ? 'wait' : 'pointer',
+                          fontSize: 13,
+                          cursor: isFetchingThis ? 'wait' : allOrdersAdded ? 'default' : 'pointer',
                           color: allOrdersAdded ? 'var(--green-deep)' : 'var(--text-secondary)',
-                          minWidth: 64
+                          opacity: allOrdersAdded ? 0.7 : 1,
+                          minWidth: 64,
+                          transition: 'opacity 0.2s',
                         }}
                       >
-                        {isFetchingThis ? '⏳' : allOrdersAdded ? '✓ Ordered' : '🛒 Order'}
+                        {isFetchingThis ? '⏳' : allOrdersAdded ? '✓ Added' : '🛒 Order missing'}
                       </button>
                     )}
                   </div>
