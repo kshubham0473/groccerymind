@@ -31,6 +31,8 @@ export default function BottomNav() {
               textDecoration: 'none',
               position: 'relative',
               color: active ? 'var(--green-mid)' : 'var(--text-muted)',
+              background: active ? 'rgba(45,106,79,0.07)' : 'transparent',
+              borderRadius: 12,
             }}>
               {/* Active indicator bar */}
               {active && (

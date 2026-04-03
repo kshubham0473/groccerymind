@@ -140,8 +140,8 @@ export default function PantryPage() {
   )
 
   return (
-    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
-      <div className="page-header">
+    <div style={{ background: '#FAF8F5', minHeight: '100vh' }}>
+      <div className="page-header" style={{ background: 'linear-gradient(160deg, #3A2A1E 0%, #5C4A3A 100%)' }}>
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Kitchen</p>
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Pantry</h1>

@@ -196,7 +196,7 @@ export default function SettingsPage() {
           <Sec title="You cook for"><Chips options={OCCASION_OPTIONS} value={occasions} onChange={setOccasions} /></Sec>
           <Sec title="Always avoid">
             <textarea value={dislikes} onChange={e => setDislikes(e.target.value)}
-              placeholder="e.g. nobody likes bitter gourd..."
+              placeholder="e.g. No egg, avoid karela, don't like okra..."
               rows={3} style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit', background: 'white', resize: 'none', lineHeight: 1.5 }} />
           </Sec>
         </div>

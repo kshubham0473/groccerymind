@@ -159,8 +159,8 @@ function DiscoverContent() {
   const closeSheet = () => { setActionDish(null); setPickingDay(null) }
 
   return (
-    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
-      <div className="page-header">
+    <div style={{ background: '#F5FAF6', minHeight: '100vh' }}>
+      <div className="page-header" style={{ background: 'linear-gradient(160deg, #1A4D3A 0%, #2E7D52 100%)' }}>
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Kitchen Discovery</p>
           <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Discover</h1>
