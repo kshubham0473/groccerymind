@@ -28,7 +28,7 @@ const DAY_SLOTS = [
   { key: 'saturday_lunch', label: 'Sat L' }, { key: 'saturday_dinner', label: 'Sat D' },
   { key: 'sunday_lunch', label: 'Sun L' }, { key: 'sunday_dinner', label: 'Sun D' },
 ]
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 6
 
 function PillSelect({ options, value, onChange, single = false }: {
   options: string[]; value: string | string[]; onChange: (v: any) => void; single?: boolean
@@ -77,7 +77,6 @@ function DishCard({ dish, selected, onToggle, onDayToggle, pickedDays, onRegener
       opacity: regenerating ? 0.5 : 1
     }}>
       <div style={{ padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        {/* Select toggle */}
         <button type="button" onClick={onToggle} disabled={regenerating} style={{
           width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
           border: '2px solid', cursor: 'pointer',
@@ -86,7 +85,6 @@ function DishCard({ dish, selected, onToggle, onDayToggle, pickedDays, onRegener
           color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>{selected ? '✓' : ''}</button>
 
-        {/* Dish info */}
         <div style={{ flex: 1, minWidth: 0 }} onClick={onToggle}>
           <p className="font-display" style={{ fontSize: 14, fontWeight: 700, margin: 0, cursor: 'pointer',
             color: selected ? 'var(--green-deep)' : 'var(--text-primary)' }}>
@@ -97,7 +95,6 @@ function DishCard({ dish, selected, onToggle, onDayToggle, pickedDays, onRegener
           )}
         </div>
 
-        {/* Cuisine tag + regenerate */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {!regenerating && (
             <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--cream)', padding: '2px 6px', borderRadius: 6 }}>{dish.cuisine_type}</span>
@@ -110,7 +107,6 @@ function DishCard({ dish, selected, onToggle, onDayToggle, pickedDays, onRegener
         </div>
       </div>
 
-      {/* Day slot picker — only when selected */}
       {selected && !regenerating && (
         <div style={{ padding: '0 14px 12px', borderTop: '1px solid var(--green-light)' }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-mid)', margin: '8px 0 6px' }}>
@@ -162,7 +158,6 @@ export default function OnboardingPage() {
   const [selectedDishes, setSelectedDishes] = useState<Set<string>>(new Set())
   const [dishDays, setDishDays] = useState<Record<string, string[]>>({})
   const [regeneratingDish, setRegeneratingDish] = useState<string | null>(null)
-  // Tracks ALL dish names ever shown (including replaced ones) to prevent re-suggestions
   const seenDishNames = useRef<Set<string>>(new Set())
 
   useEffect(() => {
@@ -192,7 +187,6 @@ export default function OnboardingPage() {
       if (d.dishes?.length) {
         setStarterDishes(d.dishes)
         setSelectedDishes(new Set(d.dishes.map((x: any) => x.name)))
-        // Seed the seen names set
         d.dishes.forEach((x: any) => seenDishNames.current.add(x.name))
       } else if (d.no_corpus) {
         setStarterError('Recipe library not yet available. You can skip this step and add dishes manually from the Meals page.')
@@ -204,12 +198,11 @@ export default function OnboardingPage() {
   }, [])
 
   useEffect(() => {
-    if (step === 5 && starterDishes.length === 0 && !starterLoading) fetchStarterDishes()
+    if (step === 6 && starterDishes.length === 0 && !starterLoading) fetchStarterDishes()
   }, [step])
 
   async function regenerateDish(oldName: string) {
     setRegeneratingDish(oldName)
-    // Use the full accumulated seen set so we never re-suggest a previously shown dish
     const excludeNames = [...seenDishNames.current]
     const res = await fetch('/api/onboarding/reassign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -217,7 +210,6 @@ export default function OnboardingPage() {
     })
     const d = await res.json()
     if (d.dish) {
-      // Add new name to seen set immediately
       seenDishNames.current.add(d.dish.name)
       setStarterDishes(p => p.map(dish => dish.name === oldName ? d.dish : dish))
       setSelectedDishes(p => {
@@ -243,14 +235,20 @@ export default function OnboardingPage() {
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ member_names: memberNames }) })
     } else if (step === 3) {
+      // Step 3a: hard constraints only
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dietary, cuisine_prefs: cuisines, dislikes, meal_complexity: complexity,
-          cooking_time: cookingTime, spice_level: spiceLevel, meal_variety: variety,
-          protein_prefs: proteinPrefs, texture_prefs: texturePrefs, health_goals: healthGoals, meal_occasions: occasions }) })
+        body: JSON.stringify({ dietary, cuisine_prefs: cuisines, dislikes }) })
     } else if (step === 4) {
+      // Step 3b: soft preferences
+      await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meal_complexity: complexity, cooking_time: cookingTime,
+          spice_level: spiceLevel, meal_variety: variety,
+          protein_prefs: proteinPrefs, texture_prefs: texturePrefs,
+          health_goals: healthGoals, meal_occasions: occasions }) })
+    } else if (step === 5) {
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quickcommerce: qcApps }) })
-    } else if (step === 5) {
+    } else if (step === 6) {
       const selected = starterDishes
         .filter(d => selectedDishes.has(d.name))
         .map(d => ({ ...d, days: dishDays[d.name] || [] }))
@@ -280,20 +278,25 @@ export default function OnboardingPage() {
 
   const progress = (step / TOTAL_STEPS) * 100
   const STEP_META = [
-    { emoji: '🏠', title: "Your Kitchen's Name", sub: 'Appears in your app header' },
-    { emoji: '👋', title: "Who's Cooking?", sub: 'Display names for greetings' },
-    { emoji: '🍽️', title: 'Your Food Preferences', sub: 'The more you tell us, the better the suggestions' },
-    { emoji: '🛒', title: 'Where Do You Order?', sub: 'Quick links on your order list' },
-    { emoji: '✨', title: 'Build Your Meal Plan', sub: 'Personalised starter set — tap ↻ to swap any dish' },
+    { emoji: '🏠', title: "Your Kitchen's Name",    sub: 'Appears in your app header' },
+    { emoji: '👋', title: "Who's Cooking?",          sub: 'Display names for greetings' },
+    { emoji: '🍽️', title: 'Diet & Cuisine',          sub: 'Hard rules — GroceryMind always respects these' },
+    { emoji: '⚙️', title: 'Cooking Style',           sub: 'Soft preferences — shapes how suggestions feel' },
+    { emoji: '🛒', title: 'Where Do You Order?',     sub: 'Quick links on your order list' },
+    { emoji: '✨', title: 'Build Your Meal Plan',    sub: 'Personalised starter set — tap ↻ to swap any dish' },
   ]
   const meta = STEP_META[step - 1]
+
+  const isNextDisabled = saving
+    || (step === 1 && !householdName.trim())
+    || (step === 6 && starterLoading)
 
   if (!user) return null
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Progress */}
+      {/* Progress bar */}
       <div style={{ height: 3, background: 'var(--border)', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20 }}>
         <div style={{ height: '100%', background: 'var(--green-mid)', width: `${progress}%`, transition: 'width 0.4s ease' }} />
       </div>
@@ -311,6 +314,7 @@ export default function OnboardingPage() {
       {/* Content */}
       <div style={{ flex: 1, padding: '4px 20px 160px' }}>
 
+        {/* Step 1 — Household name */}
         {step === 1 && (
           <div>
             <input autoFocus value={householdName} onChange={e => setHouseholdName(e.target.value)}
@@ -321,6 +325,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
+        {/* Step 2 — Member names */}
         {step === 2 && (
           <div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Assign a first name so greetings feel personal.</p>
@@ -328,13 +333,14 @@ export default function OnboardingPage() {
               <div key={m.username} style={{ marginBottom: 12 }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>@{m.username}</label>
                 <input value={memberNames[m.username] || ''} onChange={e => setMemberNames(p => ({ ...p, [m.username]: e.target.value }))}
-                  placeholder={`First name`}
+                  placeholder="First name"
                   style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 15, outline: 'none', fontFamily: 'inherit', background: 'white' }} />
               </div>
             ))}
           </div>
         )}
 
+        {/* Step 3a — Hard constraints: dietary, cuisines, dislikes */}
         {step === 3 && (
           <div>
             <Section title="Dietary preference">
@@ -343,7 +349,18 @@ export default function OnboardingPage() {
             <Section title="Cuisines you cook most">
               <PillSelect options={CUISINE_OPTIONS} value={cuisines} onChange={setCuisines} />
             </Section>
-            <Section title="Proteins you use" hint="GroceryMind won't suggest dishes with these ingredients.">
+            <Section title="Always avoid" hint="GroceryMind avoids these on every suggestion.">
+              <textarea value={dislikes} onChange={e => setDislikes(e.target.value)}
+                placeholder="e.g. No egg, avoid karela, don't like okra, too much garlic..."
+                rows={3} style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit', background: 'white', resize: 'none', lineHeight: 1.5 }} />
+            </Section>
+          </div>
+        )}
+
+        {/* Step 3b — Soft preferences: complexity, time, spice, health goals */}
+        {step === 4 && (
+          <div>
+            <Section title="Proteins you use" hint="Select what your household regularly cooks with.">
               <PillSelect options={PROTEIN_OPTIONS} value={proteinPrefs} onChange={setProteinPrefs} />
             </Section>
             <Section title="Preferred dish styles" hint="What kinds of dishes do you enjoy most?">
@@ -370,15 +387,11 @@ export default function OnboardingPage() {
             <Section title="You typically cook for">
               <PillSelect options={OCCASION_OPTIONS} value={occasions} onChange={setOccasions} />
             </Section>
-            <Section title="Always avoid" hint="GroceryMind avoids these on every suggestion.">
-              <textarea value={dislikes} onChange={e => setDislikes(e.target.value)}
-                placeholder="e.g. nobody likes bitter gourd, avoid too much garlic..."
-                rows={3} style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit', background: 'white', resize: 'none', lineHeight: 1.5 }} />
-            </Section>
           </div>
         )}
 
-        {step === 4 && (
+        {/* Step 5 — Quick commerce */}
+        {step === 5 && (
           <div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Quick links appear on your order list for one-tap ordering.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -402,8 +415,22 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {step === 5 && (
+        {/* Step 6 — Dish selection */}
+        {step === 6 && (
           <div>
+            {/* Instruction card */}
+            <div style={{
+              padding: '12px 14px', borderRadius: 12, marginBottom: 16,
+              background: 'var(--green-pale)', border: '1px solid var(--green-light)'
+            }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--green-deep)', margin: '0 0 4px' }}>
+                These are your weekly options — not a shopping list.
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--green-mid)', margin: 0, lineHeight: 1.5 }}>
+                Tap to deselect dishes you'd never cook. Tap ↻ to swap for something else.
+              </p>
+            </div>
+
             {starterLoading ? (
               <div>
                 <div style={{ textAlign: 'center', padding: '20px 0 16px' }}>
@@ -419,7 +446,7 @@ export default function OnboardingPage() {
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                     <strong style={{ color: 'var(--green-deep)' }}>{selectedDishes.size}</strong> of {starterDishes.length} selected
                   </p>
@@ -428,9 +455,6 @@ export default function OnboardingPage() {
                     <button type="button" onClick={() => setSelectedDishes(new Set())} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'white', cursor: 'pointer', color: 'var(--text-muted)', fontWeight: 600 }}>None</button>
                   </div>
                 </div>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-                  Deselect dishes you don't cook · tap ↻ to swap any dish · leave day boxes blank for auto-scheduling
-                </p>
                 {starterDishes.map(dish => (
                   <DishCard key={dish.name} dish={dish}
                     selected={selectedDishes.has(dish.name)}
@@ -446,7 +470,7 @@ export default function OnboardingPage() {
         )}
       </div>
 
-      {/* Footer — fixed with safe area */}
+      {/* Footer */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
         padding: '14px 20px',
@@ -456,18 +480,16 @@ export default function OnboardingPage() {
       }}>
         <div style={{ maxWidth: 430, margin: '0 auto' }}>
           <button onClick={saveAndContinue}
-            disabled={saving || (step === 1 && !householdName.trim()) || (step === 5 && starterLoading)}
+            disabled={isNextDisabled}
             style={{
               width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-              background: (saving || (step === 1 && !householdName.trim()) || (step === 5 && starterLoading))
-                ? 'var(--border)' : 'var(--green-mid)',
-              color: (saving || (step === 1 && !householdName.trim()) || (step === 5 && starterLoading))
-                ? 'var(--text-muted)' : 'white',
+              background: isNextDisabled ? 'var(--border)' : 'var(--green-mid)',
+              color: isNextDisabled ? 'var(--text-muted)' : 'white',
               fontSize: 15, fontWeight: 700, cursor: 'pointer',
               boxShadow: '0 4px 14px rgba(45,106,79,0.25)'
             }}>
             {saving ? 'Saving...'
-              : step === 5 ? (selectedDishes.size > 0 ? `Save ${selectedDishes.size} dishes & launch 🎉` : 'Skip & go to dashboard')
+              : step === 6 ? (selectedDishes.size > 0 ? `Save ${selectedDishes.size} dishes & launch 🎉` : 'Skip & go to dashboard')
               : 'Continue →'}
           </button>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 8 }}>
