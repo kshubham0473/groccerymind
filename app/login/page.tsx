@@ -1,8 +1,8 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
   const [mode, setMode] = useState<'login'|'join'>('login')
 
@@ -17,6 +17,15 @@ export default function LoginPage() {
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const code = searchParams.get('code')
+    if (code) {
+      setMode('join')
+      setInviteCode(code.toUpperCase())
+    }
+  }, [])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -124,5 +133,13 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--cream)' }} />}>
+      <LoginContent />
+    </Suspense>
   )
 }

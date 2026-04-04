@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { cachedFetch, cacheInvalidate } from '@/lib/page-cache'
 import { PantryItem, PantryTier, StockStatus } from '@/types'
 
 const TIERS: { key: PantryTier; label: string; emoji: string }[] = [
@@ -70,17 +71,16 @@ export default function PantryPage() {
 
   useEffect(() => {
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
-    fetch('/api/pantry').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) {
-        setItems(d)
-      } else {
-        setFetchError(d.error || 'Failed to load pantry')
+    cachedFetch(
+      'pantry:items',
+      () => fetch('/api/pantry').then(r => r.json()),
+      (d, isStale) => {
+        if (!d) { setFetchError('Network error'); setLoading(false); return }
+        if (Array.isArray(d)) { setItems(d) } else { setFetchError(d.error || 'Failed to load pantry') }
+        if (!isStale) setLoading(false)
+        else setLoading(false) // render stale immediately
       }
-      setLoading(false)
-    }).catch(e => {
-      setFetchError(e.message || 'Network error')
-      setLoading(false)
-    })
+    ).catch(e => { setFetchError(e.message || 'Network error'); setLoading(false) })
   }, [])
 
   function onCategoryChange(cat: string) {
@@ -92,6 +92,7 @@ export default function PantryPage() {
     const item = items.find(i => i.id === id)
     setItems(p => p.map(i => i.id === id ? { ...i, stock_status } : i))
     setActionItem(null)
+    cacheInvalidate('pantry:items', 'dashboard:pantry')
     await fetch('/api/pantry', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, stock_status }) })
     if (stock_status === 'finished' && item) {
       await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_name: item.name, source: 'pantry' }) })
@@ -101,6 +102,7 @@ export default function PantryPage() {
   async function addItem() {
     if (!newItem.name.trim()) return
     setSaving(true)
+    cacheInvalidate('pantry:items', 'dashboard:pantry')
     const res = await fetch('/api/pantry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newItem, name: newItem.name.trim(), stock_status: 'good' }) })
     const d = await res.json()
     if (!d.error) setItems(p => [...p, d])
@@ -121,6 +123,7 @@ export default function PantryPage() {
 
   async function deleteItem(id: string) {
     setItems(p => p.filter(i => i.id !== id)); setActionItem(null)
+    cacheInvalidate('pantry:items', 'dashboard:pantry')
     await fetch('/api/pantry', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
   }
 
@@ -283,7 +286,7 @@ export default function PantryPage() {
               {/* Category selector — drives tier + days automatically */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: 0 }}>Category</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)', margin: 0 }}>Category</p>
                   {autoCatApplied && <span style={{ fontSize: 11, color: 'var(--green-mid)', fontWeight: 600 }}>✨ Auto-detected</span>}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>

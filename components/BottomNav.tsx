@@ -22,7 +22,7 @@ export default function BottomNav() {
         {NAV.map(({ href, icon, label }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
           return (
-            <Link key={href} href={href} style={{
+            <Link key={href} href={href} prefetch={true} style={{
               flex: 1,
               display: 'flex',
               flexDirection: 'column',

@@ -44,7 +44,7 @@ function Chips({ options, value, onChange, single = false }: { options: string[]
 function Sec({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 10 }}>{title}</p>
+      <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)', marginBottom: 10 }}>{title}</p>
       {children}
     </div>
   )
@@ -72,6 +72,11 @@ export default function SettingsPage() {
   const [occasions, setOccasions] = useState<string[]>([])
   const [dislikes, setDislikes] = useState('')
   const [qcApps, setQcApps] = useState<string[]>([])
+
+  // Partner invite state (available to all members)
+  const [partnerInvite, setPartnerInvite] = useState<{ code: string; expires_at: string } | null>(null)
+  const [partnerInviteLoading, setPartnerInviteLoading] = useState(false)
+  const [partnerInviteCopied, setPartnerInviteCopied] = useState(false)
 
   // Admin state
   const [addingMember, setAddingMember] = useState(false)
@@ -104,6 +109,28 @@ export default function SettingsPage() {
       if (d.quickcommerce) setQcApps(d.quickcommerce)
     })
   }, [household])
+
+  async function generatePartnerInvite() {
+    setPartnerInviteLoading(true)
+    const res = await fetch('/api/invites', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ max_uses: 1, expires_days: 7, invite_type: 'member' })
+    })
+    const d = await res.json()
+    if (!d.error) setPartnerInvite(d)
+    setPartnerInviteLoading(false)
+  }
+
+  function shareInvite(code: string) {
+    const url = `${window.location.origin}/login?code=${code}`
+    if (navigator.share) {
+      navigator.share({ title: 'Join me on GroceryMind', text: 'Use this link to join my household on GroceryMind:', url })
+    } else {
+      navigator.clipboard?.writeText(url)
+      setPartnerInviteCopied(true)
+      setTimeout(() => setPartnerInviteCopied(false), 2500)
+    }
+  }
 
   async function save() {
     setSaving(true)
@@ -221,6 +248,45 @@ export default function SettingsPage() {
               )
             })}
           </div>
+        </div>
+
+        {/* ── Partner invite (all members) ── */}
+        <div className="card" style={{ padding: 16 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-deep)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.6 }}>👫 Invite Partner</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
+            Generate a one-time link to add someone to your household. Expires in 7 days.
+          </p>
+          {!partnerInvite ? (
+            <button onClick={generatePartnerInvite} disabled={partnerInviteLoading} style={{
+              width: '100%', padding: '12px', borderRadius: 12, border: 'none',
+              background: partnerInviteLoading ? 'var(--green-soft)' : 'var(--green-mid)',
+              color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer'
+            }}>
+              {partnerInviteLoading ? 'Generating...' : '+ Generate invite link'}
+            </button>
+          ) : (
+            <div>
+              <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--green-pale)', border: '1px solid var(--green-light)', marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: 'var(--green-mid)', fontWeight: 700, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Invite code</p>
+                <p style={{ fontSize: 22, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--green-deep)', margin: 0, fontFamily: 'monospace' }}>{partnerInvite.code}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  Valid once · expires {new Date(partnerInvite.expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => shareInvite(partnerInvite.code)} style={{
+                  flex: 1, padding: '11px', borderRadius: 12, border: 'none',
+                  background: 'var(--green-mid)', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer'
+                }}>
+                  {partnerInviteCopied ? '✓ Link copied!' : '📤 Share link'}
+                </button>
+                <button onClick={() => setPartnerInvite(null)} style={{
+                  padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)',
+                  background: 'white', fontSize: 13, cursor: 'pointer', color: 'var(--text-muted)'
+                }}>New</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Admin section (admin only) ── */}

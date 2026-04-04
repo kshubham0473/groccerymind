@@ -27,11 +27,18 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — create a new invite code
+// Any household member can create a partner (member-type) invite.
+// Beta invites remain admin-only.
 export async function POST(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
-  if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Admin only' }, { status: 403 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const body = await req.json().catch(() => ({}))
+  const invite_type_req = body.invite_type || 'member'
+  if (invite_type_req === 'beta' && user.role !== 'admin') {
+    return NextResponse.json({ error: 'Admin only for beta invites' }, { status: 403 })
+  }
+  const { max_uses = 2, expires_days = 30, invite_type = 'member' } = body
 
-  const { max_uses = 2, expires_days = 30, invite_type = 'member' } = await req.json().catch(() => ({}))
   const supabase = createServiceClient()
 
   const expires_at = new Date(Date.now() + expires_days * 24 * 60 * 60 * 1000).toISOString()

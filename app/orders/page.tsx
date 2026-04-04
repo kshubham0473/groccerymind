@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
+import { cachedFetch, cacheInvalidate } from '@/lib/page-cache'
 import { OrderItem } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/components/AppProvider'
@@ -35,22 +36,16 @@ export default function OrdersPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    fetch('/api/orders').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setItems(d)
-      setLoading(false)
-    })
-    fetch('/api/suggest/orders').then(r => r.json()).then(d => {
-      setSuggestions(d.suggestions || [])
-      setSuggestionsLoading(false)
-    }).catch(() => setSuggestionsLoading(false))
-    // Fetch frequent items
-    fetch('/api/orders/frequent').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setFrequentItems(d)
-    }).catch(() => {})
-    // Fetch preferences for QC links
-    fetch('/api/preferences').then(r => r.json()).then(d => {
-      if (!d.error) setPrefs(d)
-    })
+    Promise.all([
+      cachedFetch('orders:items',    () => fetch('/api/orders').then(r => r.json()),          (d) => { if (Array.isArray(d)) { setItems(d); setLoading(false) } }),
+      cachedFetch('orders:prefs',    () => fetch('/api/preferences').then(r => r.json()),     (d) => { if (!d?.error) setPrefs(d) }),
+      cachedFetch('orders:frequent', () => fetch('/api/orders/frequent').then(r => r.json()),(d) => { if (Array.isArray(d)) setFrequentItems(d) }),
+      // Suggestions not cached — AI response, always fresh
+      fetch('/api/suggest/orders').then(r => r.json()).then(d => {
+        setSuggestions(d.suggestions || [])
+        setSuggestionsLoading(false)
+      }).catch(() => setSuggestionsLoading(false)),
+    ])
   }, [])
 
   // Realtime — dedup on id to prevent double-add
@@ -80,7 +75,8 @@ export default function OrdersPage() {
     e.preventDefault()
     if (!newItem.trim()) return
     setAdding(true)
-    const res = await fetch('/api/orders', {
+    const res = cacheInvalidate('orders:items', 'dashboard:orders')
+    await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_name: newItem.trim() })
     })
@@ -97,7 +93,8 @@ export default function OrdersPage() {
 
   async function addFrequent(name: string) {
     setFrequentItems(p => p.filter(f => f !== name))
-    const res = await fetch('/api/orders', {
+    const res = cacheInvalidate('orders:items', 'dashboard:orders')
+    await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_name: name, source: 'manual' })
     })
@@ -107,6 +104,7 @@ export default function OrdersPage() {
 
   async function setStatus(id: string, status: Status) {
     setItems(p => p.map(i => i.id === id ? { ...i, status, is_checked: status === 'ordered' } as any : i))
+    cacheInvalidate('orders:items', 'dashboard:orders')
     await fetch('/api/orders', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status })
@@ -115,6 +113,7 @@ export default function OrdersPage() {
 
   async function deleteItem(id: string) {
     setItems(p => p.filter(i => i.id !== id))
+    cacheInvalidate('orders:items', 'dashboard:orders')
     await fetch('/api/orders', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -124,6 +123,7 @@ export default function OrdersPage() {
   async function markAllOrdered() {
     setMarkingAll(true)
     setItems(p => p.map(i => (i as any).status === 'pending' ? { ...i, status: 'ordered', is_checked: true } as any : i))
+    cacheInvalidate('orders:items', 'dashboard:orders')
     await fetch('/api/orders', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mark_all_ordered: true })
@@ -133,6 +133,7 @@ export default function OrdersPage() {
 
   async function clearOrdered() {
     setItems(p => p.filter(i => (i as any).status !== 'ordered'))
+    cacheInvalidate('orders:items', 'dashboard:orders')
     await fetch('/api/orders', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clear_ordered: true })
@@ -142,7 +143,8 @@ export default function OrdersPage() {
   async function addSuggestion(item: string) {
     // Mark immediately to prevent double-tap
     setAddedSuggestions(p => new Set([...p, item]))
-    const res = await fetch('/api/orders', {
+    const res = cacheInvalidate('orders:items', 'dashboard:orders')
+    await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_name: item, source: 'smart' })
     })
@@ -193,7 +195,7 @@ export default function OrdersPage() {
           {/* Frequent items chips */}
           {visibleFrequent.length > 0 && (
             <div style={{ marginBottom: 10 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 7 }}>Frequently ordered</p>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.6, color: 'var(--text-muted)', marginBottom: 7 }}>Frequently ordered</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {visibleFrequent.map(name => (
                   <button key={name} onClick={() => addFrequent(name)} style={{
@@ -236,7 +238,7 @@ export default function OrdersPage() {
         <div className="card">
           <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>To Order (Immediate)</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-secondary)' }}>To Order (Immediate)</span>
               {pending.length > 0 && (
                 <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--amber-light)', color: 'var(--amber)' }}>{pending.length}</span>
               )}
@@ -259,7 +261,7 @@ export default function OrdersPage() {
             borderBottom: showMaybe && maybe.length > 0 ? '1px solid var(--border)' : 'none'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Not Immediate</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)' }}>Not Immediate</span>
               {maybe.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--cream)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>{maybe.length}</span>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -330,7 +332,7 @@ export default function OrdersPage() {
               borderBottom: showOrdered ? '1px solid var(--border)' : 'none'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Ordered</span>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)' }}>Ordered</span>
                 <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: '#D1FAE5', color: '#065F46' }}>{ordered.length}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

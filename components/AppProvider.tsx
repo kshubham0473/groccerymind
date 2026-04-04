@@ -1,6 +1,7 @@
 'use client'
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { cacheClear } from '@/lib/page-cache'
 
 interface User { id: string; username: string; role: string; household_id: string }
 interface Household { id: string; name: string; member_count: number }
@@ -39,6 +40,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     _cachedAuth = null
+    cacheClear()
     setUser(null)
     setHousehold(null)
     router.push('/login')

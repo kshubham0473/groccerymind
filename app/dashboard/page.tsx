@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useApp } from '@/components/AppProvider'
 import { useTour } from '@/components/TourProvider'
 import { PantryItem, OrderItem, DailyLock, HouseholdPreferences } from '@/types'
+import { cacheSet, cacheGet, cachedFetch } from '@/lib/page-cache'
 
 const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
 
@@ -184,31 +185,25 @@ export default function Dashboard() {
     : `Good evening${displayName ? ', ' + displayName : ''}`
 
   useEffect(() => {
+    // Fire-and-forget background estimate update
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
 
-    fetch('/api/pantry').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setLowItems(d.filter((i: any) => i.stock_status !== 'good' && i.depletion_source === 'auto'))
-    })
-    fetch('/api/meal-plan').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setTodaySlots(d.filter((s: any) => s.day === today))
-    })
-    fetch('/api/orders').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked)))
-    })
-    fetch(`/api/locks?from=${getTodayISO()}&days=1`).then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setTodayLocks(d)
-    })
-    fetch('/api/preferences').then(r => r.json()).then(d => {
-      if (!d.error) setPrefs(d)
-    })
+    // Parallelise all dashboard data fetches with SWR cache
+    const locksUrl = `/api/locks?from=${getTodayISO()}&days=1`
+
+    Promise.all([
+      cachedFetch('dashboard:pantry',    () => fetch('/api/pantry').then(r => r.json()),          (d) => { if (Array.isArray(d)) setLowItems(d.filter((i: any) => i.stock_status !== 'good' && i.depletion_source === 'auto')) }),
+      cachedFetch('dashboard:meal-plan', () => fetch('/api/meal-plan').then(r => r.json()),        (d) => { if (Array.isArray(d)) setTodaySlots(d.filter((s: any) => s.day === today)) }),
+      cachedFetch('dashboard:orders',    () => fetch('/api/orders').then(r => r.json()),           (d) => { if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked))) }),
+      cachedFetch('dashboard:locks',     () => fetch(locksUrl).then(r => r.json()),               (d) => { if (Array.isArray(d)) setTodayLocks(d) }),
+      cachedFetch('dashboard:prefs',     () => fetch('/api/preferences').then(r => r.json()),     (d) => { if (!d?.error) setPrefs(d) }),
+      cachedFetch('dashboard:log',       () => fetch('/api/log/summary').then(r => r.json()),     (d) => { if (Array.isArray(d)) setInsight(computeInsight(d)) }),
+    ])
 
     // Start tour for first-time users — only fires here (post-auth, on dashboard)
     triggerIfNew()
 
-    // Fetch behaviour_log for insights (last 30 days)
-    fetch('/api/log/summary').then(r => r.json()).then(d => {
-      if (Array.isArray(d)) setInsight(computeInsight(d))
-    }).catch(() => {})
+    // (behaviour_log fetched in parallel above)
 
     // Mood nudge
     const cached = getMoodNudgeCache()

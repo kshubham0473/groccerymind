@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { cachedFetch, cacheInvalidate } from '@/lib/page-cache'
 import { useRouter } from 'next/navigation'
 import { DailyLock } from '@/types'
 
@@ -287,18 +288,18 @@ function DishEditSheet({ dish, onSave, onClose }: {
         <p className="font-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 18 }}>Edit dish</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Dish name</label>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)', marginBottom: 6 }}>Dish name</label>
             <input value={name} onChange={e => setName(e.target.value)}
               style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 15, outline: 'none', fontFamily: 'inherit' }} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>Meal pairing</label>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)', marginBottom: 6 }}>Meal pairing</label>
             <input value={pairing} onChange={e => setPairing(e.target.value)}
               placeholder="e.g. with Steamed Rice, with Roti, standalone"
               style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)', marginBottom: 6 }}>
               YouTube recipe link
               <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--green-mid)' }}>(optional)</span>
             </label>
@@ -346,14 +347,11 @@ export default function MealPlanPage() {
   const todayName = getTodayDayName()
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/meal-plan').then(r => r.json()),
-      fetch(`/api/locks?from=${todayISO()}&days=7`).then(r => r.json()),
-    ]).then(([slotsData, locksData]) => {
-      if (Array.isArray(slotsData)) setSlots(slotsData)
-      if (Array.isArray(locksData)) setLocks(locksData)
-      setLoading(false)
-    })
+    const locksUrl = `/api/locks?from=${todayISO()}&days=7`
+    let slotsReady = false, locksReady = false
+    const tryDone = () => { if (slotsReady && locksReady) setLoading(false) }
+    cachedFetch('mealplan:slots', () => fetch('/api/meal-plan').then(r => r.json()),   (d) => { if (Array.isArray(d)) { setSlots(d); slotsReady = true; tryDone() } })
+    cachedFetch('mealplan:locks', () => fetch(locksUrl).then(r => r.json()),           (d) => { if (Array.isArray(d)) { setLocks(d); locksReady = true; tryDone() } })
   }, [])
 
   useEffect(() => {
@@ -378,6 +376,7 @@ export default function MealPlanPage() {
 
   async function lockMeal(slot: string, dish_name: string, dish_id?: string) {
     setLockSheet(null)
+    cacheInvalidate('mealplan:locks', 'dashboard:locks')
     const res = await fetch('/api/locks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lock_date: selectedDate, slot, dish_name, dish_id: dish_id || null })
@@ -387,6 +386,7 @@ export default function MealPlanPage() {
   }
 
   async function unlockMeal(slot: string) {
+    cacheInvalidate('mealplan:locks', 'dashboard:locks')
     await fetch('/api/locks', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lock_date: selectedDate, slot })
@@ -397,6 +397,7 @@ export default function MealPlanPage() {
   async function addDish() {
     if (!newDish.trim() || !adding) return
     setSaving(true)
+    cacheInvalidate('mealplan:slots', 'dashboard:meal-plan')
     const res = await fetch('/api/meal-plan', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ day: adding.day, slot: adding.slot, dish_name: newDish.trim(), ingredients: parsedIngredients })
@@ -412,6 +413,7 @@ export default function MealPlanPage() {
   }
 
   async function removeSlot(id: string) {
+    cacheInvalidate('mealplan:slots', 'dashboard:meal-plan')
     await fetch('/api/meal-plan', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot_id: id }) })
     setSlots(p => p.filter(s => s.id !== id))
   }
@@ -567,10 +569,10 @@ export default function MealPlanPage() {
                           style={{ width: '100%', padding: '9px 32px 9px 12px', borderRadius: 10, border: '1.5px solid var(--green-mid)', fontSize: 14, outline: 'none', fontFamily: 'inherit', background: 'white' }} />
                         {parsing && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--green-soft)' }}>✨</span>}
                       </div>
-                      <button onClick={addDish} disabled={saving} style={{ background: 'var(--green-mid)', color: 'white', border: 'none', padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                      <button onClick={addDish} disabled={saving} style={{ background: 'var(--green-mid)', color: 'white', border: 'none', padding: '9px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                         {saving ? '...' : 'Add'}
                       </button>
-                      <button onClick={() => { setAdding(null); setNewDish(''); setParsedIngredients([]) }} style={{ background: 'none', border: '1px solid var(--border)', padding: '9px 12px', borderRadius: 10, fontSize: 13, cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
+                      <button onClick={() => { setAdding(null); setNewDish(''); setParsedIngredients([]) }} style={{ background: 'none', border: '1px solid var(--border)', padding: '9px 12px', borderRadius: 12, fontSize: 13, cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
                     </div>
                     {parsedIngredients.length > 0 && (
                       <div style={{ padding: 10, background: 'var(--green-pale)', borderRadius: 10, border: '1px solid var(--green-light)' }}>
@@ -588,7 +590,7 @@ export default function MealPlanPage() {
                   </div>
                 ) : (
                   <button onClick={() => setAdding({ day: selectedDay, slot: key })} style={{
-                    width: '100%', padding: '9px', borderRadius: 10, border: '1.5px dashed var(--green-light)',
+                    width: '100%', padding: '9px', borderRadius: 12, border: '1.5px dashed var(--green-light)',
                     background: 'none', color: 'var(--green-mid)', fontSize: 13, fontWeight: 600, cursor: 'pointer'
                   }}>+ Add to weekly rotation</button>
                 )}
