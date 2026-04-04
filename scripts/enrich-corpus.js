@@ -13,6 +13,10 @@
  * USAGE (in Codespaces terminal):
  *   GEMINI_API_KEY=your_key node scripts/enrich-corpus.js
  *
+ * Run AFTER scrape-youtube-dishes.js has produced a clean dishes-corpus.json.
+ * DEDUP_THRESHOLD lowered to 0.88 (from 0.92) — works correctly because the
+ * scraper v2 pre-filters garbage titles, so fewer legitimate variants get collapsed.
+ *
  * Time: ~15-20 min for ~900 dishes (rate-limited to stay within free quota)
  * Output: lib/dishes-corpus-v2.json
  */
@@ -30,7 +34,9 @@ const EMBED_CACHE  = path.join(__dirname, '..', 'lib', '.embed-cache.json') // r
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const KEEP_CHANNELS   = new Set(['Hebbars Kitchen', 'Your Food Lab', 'Ranveer Brar'])
-const DEDUP_THRESHOLD = 0.92   // cosine similarity above this = duplicate
+const DEDUP_THRESHOLD = 0.88   // cosine similarity above this = duplicate
+                                 // (lowered from 0.92 — cleaner scraper input means
+                                 //  fewer genuine variants get collapsed as duplicates)
 const BATCH_SIZE      = 20     // embeddings per API call (Gemini supports batch)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
