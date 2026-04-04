@@ -75,8 +75,8 @@ export default function OrdersPage() {
     e.preventDefault()
     if (!newItem.trim()) return
     setAdding(true)
-    const res = cacheInvalidate('orders:items', 'dashboard:orders')
-    await fetch('/api/orders', {
+    cacheInvalidate('orders:items', 'dashboard:orders')
+    const res = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_name: newItem.trim() })
     })
@@ -93,8 +93,8 @@ export default function OrdersPage() {
 
   async function addFrequent(name: string) {
     setFrequentItems(p => p.filter(f => f !== name))
-    const res = cacheInvalidate('orders:items', 'dashboard:orders')
-    await fetch('/api/orders', {
+    cacheInvalidate('orders:items', 'dashboard:orders')
+    const res = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_name: name, source: 'manual' })
     })
@@ -143,8 +143,8 @@ export default function OrdersPage() {
   async function addSuggestion(item: string) {
     // Mark immediately to prevent double-tap
     setAddedSuggestions(p => new Set([...p, item]))
-    const res = cacheInvalidate('orders:items', 'dashboard:orders')
-    await fetch('/api/orders', {
+    cacheInvalidate('orders:items', 'dashboard:orders')
+    const res = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_name: item, source: 'smart' })
     })
