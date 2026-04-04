@@ -4,6 +4,7 @@ import { AppProvider } from '@/components/AppProvider'
 import BottomNavWrapper from '@/components/BottomNavWrapper'
 import { TourProvider } from '@/components/TourProvider'
 import TourOverlay from '@/components/TourOverlay'
+import { Analytics } from '@vercel/analytics/next'
 
 export const metadata: Metadata = {
   title: 'GroceryMind',
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <TourOverlay />
           </TourProvider>
         </AppProvider>
+        <Analytics />
       </body>
     </html>
   )
