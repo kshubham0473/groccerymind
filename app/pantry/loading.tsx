@@ -1,7 +1,7 @@
 export default function PantryLoading() {
   return (
-    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
-      <div className="page-header" style={{ minHeight: 100 }} />
+    <div style={{ background: '#FAF8F5', minHeight: '100vh' }}>
+      <div className="page-header" style={{ background: 'linear-gradient(160deg, #3A2A1E 0%, #5C4A3A 100%)', minHeight: 100 }} />
       <div className="page-body">
         <div className="skeleton" style={{ height: 44, borderRadius: 12, marginBottom: 12 }} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>

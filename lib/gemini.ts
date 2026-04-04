@@ -226,24 +226,34 @@ export async function getStarterDishes(context: {
     ? `Preferred cuisines: ${cuisinePrefs.join(', ')}. Stick primarily to these and Indian cuisines. Avoid unrelated global cuisines like Italian, Mexican, Thai unless explicitly listed.`
     : 'Indian cuisines primarily. A few global dishes are fine.'
 
+  // Build explicit exclusion line for dietary — makes Flash-Lite much more reliable
+  const dietaryExclusion = dietary === 'Vegetarian'
+    ? 'DO NOT include: eggs, egg dishes, shakshuka, omelette, bhurji, anda, any meat, fish, or seafood.'
+    : dietary === 'Vegan'
+    ? 'DO NOT include: eggs, dairy, paneer, ghee, butter, milk, any meat or fish.'
+    : dietary === 'Jain'
+    ? 'DO NOT include: eggs, meat, fish, onion, potato, garlic, carrot, root vegetables.'
+    : ''
+
   const suggestPrompt = `You are helping plan meals for an Indian household.
 ${context.householdContext}
 
 DIETARY RULE: ${dietaryRule}
-CUISINE RULE: ${cuisineRule}
+${dietaryExclusion ? dietaryExclusion + '\n' : ''}CUISINE RULE: ${cuisineRule}
 ${dislikesText}
 
 Name 50 dishes this household would realistically cook at home across a typical week.
 Include: everyday rice meals, dal/legume dishes, vegetable sabzis, paratha/roti meals,
 quick breakfasts, paneer dishes, 2-3 weekend specials.
-Respect ALL dietary rules strictly — violations are not acceptable.
+Every single dish MUST comply with the dietary rule. No exceptions.
 
 Return ONLY a JSON array of dish names, no markdown:
 ["Dal Tadka", "Poha", "Rajma Chawal"]`
 
   let suggestedNames: string[] = []
   try {
-    const raw    = await callGeminiRaw(suggestPrompt)
+    // Use lower-temperature variant so dietary rules are respected more reliably
+    const raw    = await callGeminiLarge(suggestPrompt)
     const parsed = JSON.parse(cleanJson(raw))
     suggestedNames = Array.isArray(parsed) ? parsed.slice(0, 50) : []
   } catch { return [] }
@@ -268,10 +278,14 @@ Return ONLY a JSON array of dish names, no markdown:
 
   if (!matched.length) return []
 
-  // Step 3: Semantic dedup — removes near-identical corpus matches
-  const deduped = semanticDedup(matched, 0.88) as CorpusDish[]
+  // Safety re-filter: matched comes from filtered corpus, but apply again as a
+  // defensive check in case any mis-tagged dish slipped through embedding matching
+  const safeMatched = applyHardFilters(matched, prefs)
 
-  // Step 4: Spread across meal categories
+  // Step 3: Semantic dedup — removes near-identical corpus matches
+  const deduped = semanticDedup(safeMatched.length ? safeMatched : matched, 0.88) as CorpusDish[]
+
+  // Step 4: Spread across meal categories (draw only from already-filtered pool)
   const selected = spreadByCategory(deduped, filtered, 24)
 
   // Step 5: Gemini writes descriptions only (no dish selection)

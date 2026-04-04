@@ -28,11 +28,6 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Login failed'); setLoading(false); return }
-      // Remove new_user block if set — returning users should get the tour
-      try {
-        const tourVal = localStorage.getItem('gm_tour_seen')
-        if (tourVal === 'new_user') localStorage.removeItem('gm_tour_seen')
-      } catch {}
       router.push('/')
       router.refresh()
     } catch { setError('Something went wrong.'); setLoading(false) }
@@ -48,13 +43,11 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Failed to join'); setLoading(false); return }
-      // Mark as first-time sign-up so the tour doesn't auto-trigger on new users
-      // (they go through onboarding first; tour triggers after onboarding completes)
+      // Suppress tour for new sign-ups — they go through onboarding first
       try { localStorage.setItem('gm_tour_seen', 'new_user') } catch {}
-      // Small wait for the auth cookie to propagate before navigating
-      await new Promise(r => setTimeout(r, 200))
-      router.push('/')
-      router.refresh()
+      // Hard navigation ensures the auth cookie is sent on the very next request
+      // (router.push + router.refresh has a race with cookie propagation)
+      window.location.href = '/'
     } catch { setError('Something went wrong.'); setLoading(false) }
   }
 
