@@ -39,15 +39,15 @@ if (!YOUTUBE_KEY || !GEMINI_KEY) {
 
 // ── Channels ──────────────────────────────────────────────────────────────────
 const CHANNELS = [
-  { name: 'Hebbars Kitchen',   uploads: 'UUPPIsrNlEkaFQBk-4uNkOaw' },
-  { name: "Kabita's Kitchen",  uploads: 'UUChqsCRFePrP2X897iQkyAA' },
-  // Nisha Madhulika uses a legacy /user/ URL — find her ID via View Page Source on her channel
-  // then add: { name: 'Nisha Madhulika', uploads: 'UU...' },
+  // Disabled for this run — already scraped
+  // { name: 'Hebbars Kitchen',   uploads: 'UUPPIsrNlEkaFQBk-4uNkOaw' },
+  // { name: "Kabita's Kitchen",  uploads: 'UUChqsCRFePrP2X897iQkyAA' },
+  // { name: 'Nisha Madhulika', uploads: 'UU...' },  // find via View Page Source
   { name: 'Ranveer Brar',      uploads: 'UUEHCDn_BBnk3uTK1M64ptyw' },
   { name: 'Your Food Lab',     uploads: 'UUe2JAC5FUfbxLCfAvBWmNJA' },
 ]
 
-const MAX_PER_CHANNEL = 500   // videos to pull per channel
+const MAX_PER_CHANNEL = 1000  // videos to pull per channel
 const BATCH           = 50    // titles per Gemini call
 const OUT             = path.join(__dirname, '..', 'lib', 'dishes-corpus.json')
 
@@ -322,13 +322,24 @@ async function main() {
     console.log(`    ${kept.length} titles sent to Gemini`)
 
     let channelDishes = []
+    const totalBatches = Math.ceil(kept.length / BATCH)
     for (let i = 0; i < kept.length; i += BATCH) {
-      const batch   = kept.slice(i, i + BATCH)
-      const raw     = await extractDishes(batch, ch.name)
+      const batch      = kept.slice(i, i + BATCH)
+      const batchNum   = Math.floor(i/BATCH)+1
+      let raw = []
+      // Retry up to 2 times on empty result — catches transient Gemini rate limits
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        raw = await extractDishes(batch, ch.name)
+        if (raw.length > 0) break
+        if (attempt < 3) {
+          process.stdout.write(`    batch ${batchNum}/${totalBatches} → empty, retrying (${attempt}/2)...\n`)
+          await sleep(3000 * attempt) // back off: 3s, 6s
+        }
+      }
       const cleaned = postFilter(raw)
       const postOut = raw.length - cleaned.length
       totalPostFiltered += postOut
-      process.stdout.write(`    batch ${Math.floor(i/BATCH)+1}/${Math.ceil(kept.length/BATCH)} → ${raw.length} extracted, ${cleaned.length} kept\n`)
+      process.stdout.write(`    batch ${batchNum}/${totalBatches} → ${raw.length} extracted, ${cleaned.length} kept\n`)
       channelDishes.push(...cleaned.map(d => ({ ...d, channel: ch.name })))
       await sleep(1200)
     }
