@@ -1,348 +1,386 @@
 #!/usr/bin/env node
 /**
- * GroceryMind — Corpus Enrichment Script
- * =======================================
- * Does four things in one run:
- *   1. Loads current dishes-corpus.json, keeps only Hebbars / YFL / Ranveer
- *   2. Merges the supplementary dish list (international + curated Indian)
- *   3. Cleans obvious garbage (sweets, condiments, weird titles)
- *   4. Generates Gemini embeddings for every dish name
- *   5. Deduplicates using cosine similarity (threshold 0.92)
- *   6. Writes lib/dishes-corpus-v2.json (with embeddings)
+ * GroceryMind — YouTube Recipe Scraper
+ * =====================================
+ * Fetches video titles from Indian cooking YouTube channels,
+ * filters out non-dishes at source, then processes through Gemini
+ * to extract structured dish data.
  *
- * USAGE (in Codespaces terminal):
- *   GEMINI_API_KEY=your_key node scripts/enrich-corpus.js
+ * USAGE:
+ *   YOUTUBE_API_KEY=xxx GEMINI_API_KEY=xxx node scripts/scrape-youtube-dishes.js
  *
- * Run AFTER scrape-youtube-dishes.js has produced a clean dishes-corpus.json.
- * DEDUP_THRESHOLD lowered to 0.88 (from 0.92) — works correctly because the
- * scraper v2 pre-filters garbage titles, so fewer legitimate variants get collapsed.
+ * Get YouTube API key: console.cloud.google.com
+ *   → New project → Enable "YouTube Data API v3" → Credentials → API Key
+ * Get Gemini API key:  aistudio.google.com → Get API key
  *
- * Time: ~15-20 min for ~900 dishes (rate-limited to stay within free quota)
- * Output: lib/dishes-corpus-v2.json
+ * No npm install needed — uses Node.js built-in fetch (Node 18+)
+ *
+ * CHANGELOG:
+ *   v2 — Improved pre-filtering at source:
+ *        - Skip titles that are collection/category/playlist names
+ *        - Skip sweets, drinks, condiments, non-food content
+ *        - Skip combo/thali titles and generic single-word titles
+ *        - Skip titles over 60 chars (usually combos or clickbait)
+ *        - Skip titles with 2+ commas (multiple dishes bundled)
+ *        - Cleaner Gemini prompt with explicit exclusion list
+ *        - Progress stats on filtered-out titles
  */
 
 const fs   = require('fs')
 const path = require('path')
 
-const GEMINI_KEY = process.env.GEMINI_API_KEY
-if (!GEMINI_KEY) { console.error('❌  Set GEMINI_API_KEY'); process.exit(1) }
+const YOUTUBE_KEY = process.env.YOUTUBE_API_KEY
+const GEMINI_KEY  = process.env.GEMINI_API_KEY
 
-const CORPUS_IN    = path.join(__dirname, '..', 'lib', 'dishes-corpus.json')
-const SUPPL_IN     = path.join(__dirname, '..', 'lib', 'supplementary-dishes.json')
-const CORPUS_OUT   = path.join(__dirname, '..', 'lib', 'dishes-corpus-v2.json')
-const EMBED_CACHE  = path.join(__dirname, '..', 'lib', '.embed-cache.json') // resume support
-
-// ── Config ────────────────────────────────────────────────────────────────────
-const KEEP_CHANNELS   = new Set(['Hebbars Kitchen', 'Your Food Lab', 'Ranveer Brar'])
-// Dedup thresholds — cuisine-aware to prevent cross-cuisine collapses
-// (e.g. "Veg Ramen" → "Veg Burrito Bowl" at 0.88 is a false positive)
-const DEDUP_SAME_CUISINE      = 0.92  // strict within the same cuisine type
-const DEDUP_RELATED_CUISINE   = 0.96  // looser across related cuisine groups
-const DEDUP_CROSS_CUISINE     = 0.98  // almost never collapse across unrelated cuisines
-
-// Cuisine groups — dishes within the same group use DEDUP_RELATED_CUISINE
-const CUISINE_GROUPS = {
-  'North Indian':    'indian',
-  'South Indian':    'indian',
-  'Maharashtrian':   'indian',
-  'Punjabi':         'indian',
-  'Gujarati':        'indian',
-  'Bengali':         'indian',
-  'Rajasthani':      'indian',
-  'Goan':            'indian',
-  'Kashmiri':        'indian',
-  'Mughlai':         'indian',
-  'Hyderabadi':      'indian',
-  'Indian':          'indian',
-  'Street Food':     'indian',
-  'Snack':           'indian',
-  'Chinese':         'eastasian',
-  'Japanese':        'eastasian',
-  'Korean':          'eastasian',
-  'Thai':            'southeast_asian',
-  'Vietnamese':      'southeast_asian',
-  'Malaysian':       'southeast_asian',
-  'Italian':         'western',
-  'Continental':     'western',
-  'Mediterranean':   'western',
-  'Mexican':         'western',
-  'American':        'western',
+if (!YOUTUBE_KEY || !GEMINI_KEY) {
+  console.error('❌  Set YOUTUBE_API_KEY and GEMINI_API_KEY env vars first.')
+  process.exit(1)
 }
 
-function getDedupThreshold(cuisineA, cuisineB) {
-  if (!cuisineA || !cuisineB) return DEDUP_SAME_CUISINE
-  if (cuisineA === cuisineB) return DEDUP_SAME_CUISINE
-  const groupA = CUISINE_GROUPS[cuisineA]
-  const groupB = CUISINE_GROUPS[cuisineB]
-  if (groupA && groupB && groupA === groupB) return DEDUP_RELATED_CUISINE
-  return DEDUP_CROSS_CUISINE
-}
-const BATCH_SIZE      = 20     // embeddings per API call (Gemini supports batch)
+// ── Channels ──────────────────────────────────────────────────────────────────
+const CHANNELS = [
+  // Disabled for this run — already scraped
+  // { name: 'Hebbars Kitchen',   uploads: 'UUPPIsrNlEkaFQBk-4uNkOaw' },
+  // { name: "Kabita's Kitchen",  uploads: 'UUChqsCRFePrP2X897iQkyAA' },
+  // { name: 'Nisha Madhulika', uploads: 'UU...' },  // find via View Page Source
+  { name: 'Ranveer Brar',      uploads: 'UUEHCDn_BBnk3uTK1M64ptyw' },
+  { name: 'Your Food Lab',     uploads: 'UUe2JAC5FUfbxLCfAvBWmNJA' },
+]
+
+const MAX_PER_CHANNEL = 1000  // videos to pull per channel
+const BATCH           = 50    // titles per Gemini call
+const OUT             = path.join(__dirname, '..', 'lib', 'dishes-corpus.json')
+
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-// ── Step 1: load & filter corpus ─────────────────────────────────────────────
-function loadAndFilter() {
-  const raw     = JSON.parse(fs.readFileSync(CORPUS_IN, 'utf-8'))
-  const all     = raw.dishes || []
-  const kept    = all.filter(d => KEEP_CHANNELS.has(d.channel))
-  console.log(`Loaded ${all.length} dishes, kept ${kept.length} from target channels`)
-  return kept
-}
-
-// ── Step 2: load supplementary ───────────────────────────────────────────────
-function loadSupplementary() {
-  if (!fs.existsSync(SUPPL_IN)) {
-    console.warn('  ⚠️  No supplementary-dishes.json found, skipping')
-    return []
-  }
-  const raw = JSON.parse(fs.readFileSync(SUPPL_IN, 'utf-8'))
-  const dishes = (raw.dishes || []).map(d => ({ ...d, channel: 'curated', source: 'manual' }))
-  console.log(`Loaded ${dishes.length} supplementary dishes`)
-  return dishes
-}
-
-// ── Step 3: clean ─────────────────────────────────────────────────────────────
-const SKIP_WORDS = [
-  'halwa','kheer','ladoo','barfi','mithai','payasam','gulab jamun','jalebi',
-  'rasgulla','gulgule','malpua','modak','peda','burfi','sheera','shrikhand',
-  'chutney','pickle','achar','papad','raita',
-  'juice','shake','smoothie','lassi','chaas','squash','sherbet',
-  'chaat masala','masala powder',
-]
-const SKIP_PATTERNS = [
-  /\b(combo|recipes?)\b/i,
-  /^\d+ in \d+/,
-  /&amp;/,
+// ── Pre-filter: applied before sending to Gemini ──────────────────────────────
+// Words that indicate a title is a collection/category, not a single dish
+const COLLECTION_WORDS = [
+  'recipes', 'thali', 'platter', 'combo', 'twists', 'collection',
+  'series', 'episode', 'part 1', 'part 2', 'lunch box', 'meal prep',
+  'batch cook', '| ep', 'vol.', 'vol ',
 ]
 
-function isGarbage(name) {
-  if (!name || typeof name !== 'string') return true
-  const n = name.toLowerCase().trim()
-  if (SKIP_WORDS.some(w => n.includes(w))) return true
-  if (SKIP_PATTERNS.some(p => p.test(n))) return true
-  if ((name.match(/,/g) || []).length >= 2) return true
-  if (name.length > 60) return true
-  // Generic non-dish titles
-  if (/^(instant|quick|easy|simple|healthy|crispy)\s+\w+$/i.test(name.trim())) {
-    // Only keep if the second word is a recognisable dish
-    const second = name.trim().split(/\s+/).slice(1).join(' ').toLowerCase()
-    const dishWords = ['dosa','idli','poha','upma','paratha','sabzi','dal','rice','roti','curry']
-    if (!dishWords.some(w => second.includes(w))) return true
+// Words that mean the video is not a dish at all
+const NON_DISH_WORDS = [
+  'kitchen tour', 'equipment', 'knife', 'cookware', 'review', 'unboxing',
+  'challenge', 'mukbang', 'vlog', 'travel', 'market tour', 'haul',
+  'how i ', 'my daily', 'morning routine', ' tips', ' tricks', ' hacks',
+  'diet plan', 'weight loss plan', 'meal plan video', 'grocery', 'shopping',
+]
+
+// Ingredient/product categories that are never meal-plan dishes
+const SKIP_CONTENT_WORDS = [
+  // Sweets & desserts
+  'halwa', 'kheer', 'ladoo', 'laddoo', 'barfi', 'burfi', 'mithai', 'payasam',
+  'gulab jamun', 'jalebi', 'rasgulla', 'gulgule', 'malpua', 'modak', 'peda',
+  'sheera', 'shrikhand', 'rabri', 'basundi', 'phirni', 'kulfi', 'falooda',
+  // Drinks
+  'juice', ' shake', 'milkshake', 'smoothie', 'lassi', 'chaas', 'buttermilk',
+  'squash', 'sherbet', 'sharbat', ' drink', 'beverage', 'tea recipe', 'coffee recipe',
+  'masala chai', 'doodh',
+  // Condiments & accompaniments (standalone)
+  ' pickle', ' achar', 'murabba', ' papad', 'papadum', 'pappadum',
+]
+
+// Titles that are just a single generic word — too vague to be useful
+const GENERIC_SINGLE = new Set([
+  'dosa', 'idli', 'paratha', 'roti', 'pulao', 'biryani', 'curry', 'rice',
+  'chutney', 'pickle', 'sabzi', 'sabji', 'dal', 'soup', 'vada', 'pakoda',
+  'salad', 'raita', 'bread', 'naan', 'poori', 'puri',
+])
+
+/**
+ * Returns true if the title should be SKIPPED before even sending to Gemini.
+ * Also returns a reason string for stats tracking.
+ */
+function shouldSkip(rawTitle) {
+  const t  = rawTitle.toLowerCase()
+  const tClean = t
+    .replace(/[|–—:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  // Only skip actual YouTube Shorts (title literally contains #shorts or #short)
+  if (t.includes('#shorts') || t.includes('#short ') || t.endsWith('#short')) return 'shorts/hashtag'
+
+  // Too long — only block extreme lengths (200+ chars = description leaked into title)
+  if (rawTitle.length > 200) return 'too_long'
+
+  // Multiple dishes bundled with commas or &
+  const commaCount = (rawTitle.match(/,/g) || []).length
+  if (commaCount >= 2) return 'combo_title'
+
+  // Collection / category / playlist titles
+  for (const word of COLLECTION_WORDS) {
+    if (tClean.includes(word)) return `collection:${word}`
   }
-  return false
-}
 
-function cleanDishes(dishes) {
-  const before = dishes.length
-  const cleaned = dishes.filter(d => !isGarbage(d.name))
-  console.log(`Cleaned: ${before} → ${cleaned.length} (removed ${before - cleaned.length} garbage entries)`)
-  return cleaned
-}
-
-// ── Step 4: embeddings ────────────────────────────────────────────────────────
-// Load cache to allow resuming if the script is interrupted
-function loadCache() {
-  if (fs.existsSync(EMBED_CACHE)) {
-    try { return JSON.parse(fs.readFileSync(EMBED_CACHE, 'utf-8')) }
-    catch { return {} }
+  // Non-dish content (vlogs, reviews, etc.)
+  for (const word of NON_DISH_WORDS) {
+    if (tClean.includes(word)) return `non_dish:${word}`
   }
-  return {}
-}
-function saveCache(cache) {
-  fs.writeFileSync(EMBED_CACHE, JSON.stringify(cache))
-}
 
-async function embedBatch(texts) {
-  const body = {
-    requests: texts.map(text => ({
-      model: 'models/text-embedding-004',
-      content: { parts: [{ text }] },
-      taskType: 'SEMANTIC_SIMILARITY',
-    }))
+  // Sweets, drinks, condiments
+  for (const word of SKIP_CONTENT_WORDS) {
+    if (tClean.includes(word.trim())) return `skip_content:${word.trim()}`
   }
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents?key=${GEMINI_KEY}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-  )
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Embed API ${res.status}: ${err.slice(0, 200)}`)
+
+  // Pure standalone chutney (not "Coconut Chutney" as a dish but just "Chutney")
+  // Allow "X Chutney" as part of a dish but block bare "Chutney" titles
+  const coreWords = tClean.replace(/[^a-z\s]/g, '').trim().split(/\s+/)
+  if (coreWords.length === 1 && GENERIC_SINGLE.has(coreWords[0])) return 'generic_single_word'
+  if (coreWords.length === 2 && coreWords[1] === 'chutney') {
+    // "X Chutney" is fine (Coconut Chutney, Tomato Chutney)
+    // but "Chutney Recipes", "Indian Chutney" etc are caught by COLLECTION_WORDS already
   }
-  const data = await res.json()
-  return (data.embeddings || []).map(e => e.values || [])
+
+  return null // keep this title
 }
 
-async function embedAllDishes(dishes) {
-  const cache = loadCache()
-  let cacheHits = 0
-  let apiCalls  = 0
-
-  // Identify which need embedding
-  const needEmbed = dishes.filter(d => !cache[d.name])
-  const names     = needEmbed.map(d => d.name)
-
-  console.log(`\nEmbedding ${names.length} dishes (${Object.keys(cache).length} cached)...`)
-
-  for (let i = 0; i < names.length; i += BATCH_SIZE) {
-    const batch = names.slice(i, i + BATCH_SIZE)
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1
-    const totalBatches = Math.ceil(names.length / BATCH_SIZE)
-
-    process.stdout.write(`  Batch ${batchNum}/${totalBatches} (${batch.length} dishes)...`)
-
-    try {
-      const embeddings = await embedBatch(batch)
-      for (let j = 0; j < batch.length; j++) {
-        if (embeddings[j]?.length) {
-          cache[batch[j]] = embeddings[j]
-          apiCalls++
-        }
-      }
-      saveCache(cache)
-      process.stdout.write(` ✓\n`)
-    } catch (err) {
-      process.stdout.write(` ⚠️  ${err.message}\n`)
-      // Wait longer on error (rate limit)
-      await sleep(5000)
+// ── Step 1: fetch titles from YouTube playlist ────────────────────────────────
+async function fetchTitles(playlistId, max) {
+  const results = []
+  let token = null
+  while (results.length < max) {
+    const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50&key=${YOUTUBE_KEY}${token ? '&pageToken=' + token : ''}`
+    const res = await fetch(url)
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      console.warn(`  YouTube API error ${res.status} for playlist ${playlistId}`)
+      console.warn(`  Response: ${errBody.slice(0, 300)}`)
+      console.warn('  → Skipping this channel. Check the playlist ID or API key permissions.')
+      break
     }
-
-    // Respect rate limits — ~1500 RPM for embedding API
-    await sleep(600)
-  }
-
-  // Attach embeddings to all dishes
-  const result = dishes.map(d => ({
-    ...d,
-    embedding: cache[d.name] || null
-  })).filter(d => d.embedding !== null)
-
-  console.log(`  Embedded: ${result.length} dishes (${apiCalls} new calls, ${Object.keys(cache).length - apiCalls} from cache)`)
-  return result
-}
-
-// ── Step 5: cosine similarity deduplication ───────────────────────────────────
-function cosine(a, b) {
-  let dot = 0, magA = 0, magB = 0
-  for (let i = 0; i < a.length; i++) {
-    dot  += a[i] * b[i]
-    magA += a[i] * a[i]
-    magB += b[i] * b[i]
-  }
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-10)
-}
-
-function deduplicateBySimilarity(dishes) {
-  console.log(`\nDeduplicating ${dishes.length} dishes (cuisine-aware thresholds)...`)
-  const kept   = []
-  const merged = []
-
-  for (const dish of dishes) {
-    let isDuplicate = false
-    for (const keptDish of kept) {
-      const threshold = getDedupThreshold(dish.cuisine_type, keptDish.cuisine_type)
-      const sim = cosine(dish.embedding, keptDish.embedding)
-      if (sim >= threshold) {
-        isDuplicate = true
-        merged.push({
-          duplicate: dish.name,
-          kept:      keptDish.name,
-          similarity: sim.toFixed(3),
-          threshold:  threshold.toFixed(2),
-          cuisines:  `${dish.cuisine_type} / ${keptDish.cuisine_type}`,
-        })
-        // If the duplicate has a YouTube URL and the kept one doesn't, swap
-        if (dish.youtube_url && !keptDish.youtube_url) {
-          keptDish.youtube_url = dish.youtube_url
-          keptDish.channel     = dish.channel || keptDish.channel
-        }
-        break
+    const data = await res.json()
+    for (const item of data.items || []) {
+      const title   = item.snippet?.title || ''
+      const videoId = item.snippet?.resourceId?.videoId
+      if (videoId && title.length > 5 && !title.toLowerCase().includes('#shorts')) {
+        results.push({ title, url: `https://www.youtube.com/watch?v=${videoId}` })
       }
     }
-    if (!isDuplicate) kept.push(dish)
+    token = data.nextPageToken
+    if (!token) break
+    await sleep(150)
   }
+  return results.slice(0, max)
+}
 
-  console.log(`  Removed ${merged.length} duplicates → ${kept.length} unique dishes`)
+// ── Step 2: pre-filter titles before Gemini ───────────────────────────────────
+function preFilter(titles) {
+  const kept = []
+  const skipStats = {}
+  for (const t of titles) {
+    const reason = shouldSkip(t.title)
+    if (reason) {
+      const cat = reason.split(':')[0]
+      skipStats[cat] = (skipStats[cat] || 0) + 1
+    } else {
+      kept.push(t)
+    }
+  }
+  return { kept, skipStats }
+}
 
-  // Show a sample of what was merged — grouped by threshold used
-  const crossCuisine = merged.filter(m => parseFloat(m.threshold) >= DEDUP_CROSS_CUISINE)
-  const related      = merged.filter(m => parseFloat(m.threshold) === DEDUP_RELATED_CUISINE)
-  const same         = merged.filter(m => parseFloat(m.threshold) === DEDUP_SAME_CUISINE)
-  console.log(`  Same cuisine (${DEDUP_SAME_CUISINE}): ${same.length} merged`)
-  console.log(`  Related cuisine (${DEDUP_RELATED_CUISINE}): ${related.length} merged`)
-  console.log(`  Cross cuisine (${DEDUP_CROSS_CUISINE}): ${crossCuisine.length} merged`)
+// ── Step 3: Gemini extraction ─────────────────────────────────────────────────
+async function extractDishes(batch, channelName) {
+  const lines = batch.map((t, i) => `${i+1}. [${t.url}] ${t.title}`).join('\n')
+  const prompt = `Extract Indian home cooking dish names from these YouTube video titles (channel: ${channelName}).
 
-  console.log('\n  Sample merges:')
-  merged.slice(0, 20).forEach(m =>
-    console.log(`    ${m.similarity} [t=${m.threshold}] — "${m.duplicate}" → kept "${m.kept}" (${m.cuisines})`)
-  )
+SKIP these — do not include in output:
+- Vlogs, kitchen tours, equipment reviews, shopping hauls
+- Drinks, juices, shakes, tea, coffee, lassi
+- Sweets and desserts (halwa, kheer, ladoo, barfi, jalebi, etc.)
+- Standalone chutneys, pickles, papads used only as accompaniments
+- Titles that are collections/playlists ("X Recipes", "Easy Y", "Best Z")
+- Combo/thali videos listing multiple dishes in one title
+- Generic category titles with no specific dish name
 
-  return { kept, merged }
+INCLUDE: any specific named Indian home-cooked dish — even if the title has marketing words like "restaurant style" or "easy". Extract just the core dish name.
+
+For each valid dish return:
+- name: clean dish name only — strip "recipe", "how to make", "easy", "restaurant style", "homemade", "quick", channel name, and any trailing descriptors. Keep regional adjectives if they distinguish the dish (e.g. "Punjabi Dum Aloo", "Goan Fish Curry").
+- meal_pairing: "with Steamed Rice" | "with Roti" | "standalone" | "as snack" | "with Dal" | "with Chutney"
+- cuisine_type: "North Indian" | "South Indian" | "Maharashtrian" | "Punjabi" | "Gujarati" | "Bengali" | "Goan" | "Rajasthani" | "Street Food" | "Snack" | "Continental" | "Chinese" | "Mexican" | "Thai" | "Italian" | "Japanese" | "Korean" | "Mediterranean"
+- complexity: "quick" | "moderate" | "elaborate"
+- is_vegetarian: true | false (false if contains eggs, meat, fish, or seafood)
+- tags: subset of ["high-protein","low-oil","one-pot","kid-friendly","comfort","festive","quick","healthy","street-food","breakfast","snack"]
+- youtube_url: the URL in brackets
+
+Titles:
+${lines}
+
+Return ONLY a valid JSON array of dishes. Empty array [] if none qualify. No markdown:
+[{"name":"Dal Tadka","meal_pairing":"with Steamed Rice","cuisine_type":"North Indian","complexity":"moderate","is_vegetarian":true,"tags":["comfort"],"youtube_url":"https://..."}]`
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 4000 }
+    })
+  })
+  if (!res.ok) { console.warn('  Gemini error:', res.status); return [] }
+  const raw = (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text || ''
+  try {
+    const parsed = JSON.parse(raw.replace(/^```json\s*|^```\s*|```\s*$/gm, '').trim())
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
+}
+
+// ── Step 4: post-process Gemini output ────────────────────────────────────────
+// Final safety filter on what Gemini returns — catches anything it missed
+const POST_SKIP_WORDS = [
+  'halwa','kheer','ladoo','laddoo','barfi','burfi','mithai','payasam',
+  'gulab jamun','jalebi','rasgulla','gulgule','malpua','modak','peda',
+  'sheera','shrikhand','rabri','kulfi','falooda','basundi','phirni',
+  'juice','shake','smoothie','lassi','chaas','squash','sherbet','sharbat',
+  'pickle','achar','murabba','papad',
+  'chutney powder', 'chutney podi', 'thokku',  // standalone condiments
+]
+const POST_SKIP_PATTERNS = [
+  /\brecipes?\b/i,
+  /\bthali\b/i,
+  /\bcombo\b/i,
+  /\bplatter\b/i,
+  /\blunch box\b/i,
+  /,.+,/,                       // 2+ commas = combo title
+  /^[a-z\s]+\s*&\s*[a-z\s]+$/i, // pure "X & Y" with no regional/method qualifier
+]
+
+function postFilter(dishes) {
+  return dishes.filter(d => {
+    if (!d.name || typeof d.name !== 'string') return false
+    const n = d.name.toLowerCase()
+
+    // Must have a minimum viable name
+    if (d.name.trim().length < 3) return false
+
+    // Strip titles that are just one generic word
+    const words = n.replace(/[^a-z\s]/g, '').trim().split(/\s+/)
+    if (words.length === 1 && GENERIC_SINGLE.has(words[0])) return false
+
+    // Content-based skip
+    for (const w of POST_SKIP_WORDS) {
+      if (n.includes(w)) return false
+    }
+    for (const rx of POST_SKIP_PATTERNS) {
+      if (rx.test(d.name)) return false
+    }
+
+    // Must have required fields
+    if (!d.cuisine_type || !d.meal_pairing) return false
+
+    return true
+  })
+}
+
+// ── Step 5: deduplicate by normalised name ────────────────────────────────────
+function norm(name) {
+  return name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+function dedup(dishes) {
+  const map = new Map()
+  for (const d of dishes) {
+    const k = norm(d.name)
+    if (!map.has(k) || (!map.get(k).youtube_url && d.youtube_url)) map.set(k, d)
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('🍽️  GroceryMind Corpus Enrichment\n')
+  console.log('🎬  GroceryMind YouTube Recipe Scraper v2\n')
+  const all = []
+  let totalFetched = 0, totalPreFiltered = 0, totalPostFiltered = 0
 
-  // 1. Load & filter
-  const scraped = loadAndFilter()
-  const supplementary = loadSupplementary()
+  for (const ch of CHANNELS) {
+    console.log(`📺  ${ch.name}`)
+    const titles = await fetchTitles(ch.uploads, MAX_PER_CHANNEL)
+    if (!titles.length) {
+      console.warn(`    ⚠️  No titles fetched for ${ch.name} — skipping channel`)
+      console.log()
+      continue
+    }
+    totalFetched += titles.length
+    console.log(`    ${titles.length} videos fetched`)
 
-  // 2. Merge (supplementary dishes get priority — they're already clean)
-  const supplNames = new Set(supplementary.map(d => d.name.toLowerCase()))
-  const scrapedDeduped = scraped.filter(d => !supplNames.has(d.name.toLowerCase()))
-  const merged = [...supplementary, ...scrapedDeduped]
-  console.log(`\nMerged: ${supplementary.length} supplementary + ${scrapedDeduped.length} scraped = ${merged.length} total`)
+    const { kept, skipStats } = preFilter(titles)
+    const preFilteredOut = titles.length - kept.length
+    totalPreFiltered += preFilteredOut
 
-  // 3. Clean
-  const cleaned = cleanDishes(merged)
+    if (Object.keys(skipStats).length) {
+      const statStr = Object.entries(skipStats)
+        .sort((a,b) => b[1]-a[1])
+        .map(([k,v]) => `${k}:${v}`)
+        .join(', ')
+      console.log(`    pre-filter removed ${preFilteredOut}: ${statStr}`)
+    }
+    console.log(`    ${kept.length} titles sent to Gemini`)
 
-  // 4. Embed
-  const withEmbeddings = await embedAllDishes(cleaned)
-
-  // 5. Deduplicate
-  const { kept, merged: dupes } = deduplicateBySimilarity(withEmbeddings)
-
-  // 6. Write output (embeddings included for runtime use)
-  const output = {
-    generated_at:       new Date().toISOString(),
-    total:              kept.length,
-    channels_included:  [...KEEP_CHANNELS, 'curated'],
-    dedup_thresholds:   { same_cuisine: DEDUP_SAME_CUISINE, related: DEDUP_RELATED_CUISINE, cross: DEDUP_CROSS_CUISINE },
-    duplicates_removed: dupes.length,
-    dishes: kept,
+    let channelDishes = []
+    const totalBatches = Math.ceil(kept.length / BATCH)
+    for (let i = 0; i < kept.length; i += BATCH) {
+      const batch      = kept.slice(i, i + BATCH)
+      const batchNum   = Math.floor(i/BATCH)+1
+      let raw = []
+      // Retry up to 2 times on empty result — catches transient Gemini rate limits
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        raw = await extractDishes(batch, ch.name)
+        if (raw.length > 0) break
+        if (attempt < 3) {
+          process.stdout.write(`    batch ${batchNum}/${totalBatches} → empty, retrying (${attempt}/2)...\n`)
+          await sleep(3000 * attempt) // back off: 3s, 6s
+        }
+      }
+      const cleaned = postFilter(raw)
+      const postOut = raw.length - cleaned.length
+      totalPostFiltered += postOut
+      process.stdout.write(`    batch ${batchNum}/${totalBatches} → ${raw.length} extracted, ${cleaned.length} kept\n`)
+      channelDishes.push(...cleaned.map(d => ({ ...d, channel: ch.name })))
+      await sleep(1200)
+    }
+    console.log(`    ✓ ${channelDishes.length} dishes from ${ch.name}\n`)
+    all.push(...channelDishes)
+    await sleep(500)
   }
 
-  fs.writeFileSync(CORPUS_OUT, JSON.stringify(output))
-  const sizeKB = Math.round(fs.statSync(CORPUS_OUT).size / 1024)
+  const final = dedup(all)
 
-  console.log(`\n✅  Saved ${kept.length} dishes to ${CORPUS_OUT} (${sizeKB} KB)`)
+  console.log('─'.repeat(50))
+  console.log(`📊  Summary:`)
+  console.log(`    Videos fetched:        ${totalFetched}`)
+  console.log(`    Pre-filtered (source): ${totalPreFiltered}`)
+  console.log(`    Post-filtered (Gemini):${totalPostFiltered}`)
+  console.log(`    Raw dishes extracted:  ${all.length}`)
+  console.log(`    After name dedup:      ${final.length}`)
+  console.log()
 
-  // Stats
-  const { Counter } = (() => {
-    const c = {}
-    return {
-      Counter: arr => {
-        const map = {}
-        arr.forEach(x => map[x] = (map[x] || 0) + 1)
-        return Object.entries(map).sort((a,b) => b[1]-a[1])
-      }
-    }
-  })()
+  // Cuisine breakdown
+  const cuisineCounts = {}
+  for (const d of final) cuisineCounts[d.cuisine_type] = (cuisineCounts[d.cuisine_type]||0)+1
+  console.log('Cuisine breakdown:')
+  Object.entries(cuisineCounts).sort((a,b)=>b[1]-a[1]).forEach(([c,n]) => {
+    console.log(`    ${c.padEnd(20)} ${n}`)
+  })
+  console.log()
 
-  console.log('\nCuisine breakdown:')
-  Counter(kept.map(d => d.cuisine_type || 'Unknown'))
-    .slice(0, 15)
-    .forEach(([k, v]) => console.log(`  ${k}: ${v}`))
+  fs.mkdirSync(path.dirname(OUT), { recursive: true })
+  fs.writeFileSync(OUT, JSON.stringify({
+    generated_at:  new Date().toISOString(),
+    total:         final.length,
+    channels:      CHANNELS.map(c => c.name),
+    dishes:        final,
+  }, null, 2))
 
-  const veg = kept.filter(d => d.is_vegetarian).length
-  console.log(`\nVegetarian: ${veg} | Non-veg: ${kept.length - veg}`)
-
-  console.log('\n🎉  Done! Now run:')
-  console.log('    git add lib/dishes-corpus-v2.json')
-  console.log('    git commit -m "Add enriched corpus v2 with embeddings"')
-  console.log('    git push')
-  console.log('\n⚠️   The .embed-cache.json file is for resuming only — do NOT commit it.')
-  console.log('    Add lib/.embed-cache.json to your .gitignore')
+  console.log(`✅  Saved to ${OUT}`)
+  console.log('\nFirst 10 dishes:')
+  final.slice(0,10).forEach(d => console.log(`    ${d.name.padEnd(35)} ${d.cuisine_type} · ${d.meal_pairing}`))
+  console.log('\n🎉  Done! Next step: run scripts/enrich-corpus.js to generate embeddings.')
+  console.log('    (Remember to lower DEDUP_THRESHOLD to 0.88 in enrich-corpus.js for better variety)\n')
 }
 
-main().catch(e => { console.error('Fatal:', e); process.exit(1) })
+main().catch(e => { console.error(e); process.exit(1) })
