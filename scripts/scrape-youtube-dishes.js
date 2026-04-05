@@ -42,7 +42,7 @@ const CHANNELS = [
   { name: 'Hebbars Kitchen',   uploads: 'UUYNOe9bCJCg97IbcDllxFhg' },
   { name: "Kabita's Kitchen",  uploads: 'UUmMHHMzF7_lCTTFXp6X3TTA' },
   { name: 'Nisha Madhulika',   uploads: 'UUCijOziG2oNdh3_VFaWlyEw' },
-  { name: 'Ranveer Brar',      uploads: 'UU4vSqUrNNOYaNgRcbTFhBpg' },
+  { name: 'Ranveer Brar',      uploads: 'UUbIp4Z6eajPSHDPONxMHOWg' },
   { name: 'Your Food Lab',     uploads: 'UUwKuSMuiHcEBMnNhJJixULA' },
 ]
 
@@ -144,7 +144,13 @@ async function fetchTitles(playlistId, max) {
   while (results.length < max) {
     const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50&key=${YOUTUBE_KEY}${token ? '&pageToken=' + token : ''}`
     const res = await fetch(url)
-    if (!res.ok) { console.warn('  YouTube error:', res.status); break }
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      console.warn(`  YouTube API error ${res.status} for playlist ${playlistId}`)
+      console.warn(`  Response: ${errBody.slice(0, 300)}`)
+      console.warn('  → Skipping this channel. Check the playlist ID or API key permissions.')
+      break
+    }
     const data = await res.json()
     for (const item of data.items || []) {
       const title   = item.snippet?.title || ''
@@ -293,6 +299,11 @@ async function main() {
   for (const ch of CHANNELS) {
     console.log(`📺  ${ch.name}`)
     const titles = await fetchTitles(ch.uploads, MAX_PER_CHANNEL)
+    if (!titles.length) {
+      console.warn(`    ⚠️  No titles fetched for ${ch.name} — skipping channel`)
+      console.log()
+      continue
+    }
     totalFetched += titles.length
     console.log(`    ${titles.length} videos fetched`)
 
