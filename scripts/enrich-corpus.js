@@ -34,9 +34,49 @@ const EMBED_CACHE  = path.join(__dirname, '..', 'lib', '.embed-cache.json') // r
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const KEEP_CHANNELS   = new Set(['Hebbars Kitchen', 'Your Food Lab', 'Ranveer Brar'])
-const DEDUP_THRESHOLD = 0.88   // cosine similarity above this = duplicate
-                                 // (lowered from 0.92 — cleaner scraper input means
-                                 //  fewer genuine variants get collapsed as duplicates)
+// Dedup thresholds — cuisine-aware to prevent cross-cuisine collapses
+// (e.g. "Veg Ramen" → "Veg Burrito Bowl" at 0.88 is a false positive)
+const DEDUP_SAME_CUISINE      = 0.92  // strict within the same cuisine type
+const DEDUP_RELATED_CUISINE   = 0.96  // looser across related cuisine groups
+const DEDUP_CROSS_CUISINE     = 0.98  // almost never collapse across unrelated cuisines
+
+// Cuisine groups — dishes within the same group use DEDUP_RELATED_CUISINE
+const CUISINE_GROUPS = {
+  'North Indian':    'indian',
+  'South Indian':    'indian',
+  'Maharashtrian':   'indian',
+  'Punjabi':         'indian',
+  'Gujarati':        'indian',
+  'Bengali':         'indian',
+  'Rajasthani':      'indian',
+  'Goan':            'indian',
+  'Kashmiri':        'indian',
+  'Mughlai':         'indian',
+  'Hyderabadi':      'indian',
+  'Indian':          'indian',
+  'Street Food':     'indian',
+  'Snack':           'indian',
+  'Chinese':         'eastasian',
+  'Japanese':        'eastasian',
+  'Korean':          'eastasian',
+  'Thai':            'southeast_asian',
+  'Vietnamese':      'southeast_asian',
+  'Malaysian':       'southeast_asian',
+  'Italian':         'western',
+  'Continental':     'western',
+  'Mediterranean':   'western',
+  'Mexican':         'western',
+  'American':        'western',
+}
+
+function getDedupThreshold(cuisineA, cuisineB) {
+  if (!cuisineA || !cuisineB) return DEDUP_SAME_CUISINE
+  if (cuisineA === cuisineB) return DEDUP_SAME_CUISINE
+  const groupA = CUISINE_GROUPS[cuisineA]
+  const groupB = CUISINE_GROUPS[cuisineB]
+  if (groupA && groupB && groupA === groupB) return DEDUP_RELATED_CUISINE
+  return DEDUP_CROSS_CUISINE
+}
 const BATCH_SIZE      = 20     // embeddings per API call (Gemini supports batch)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -191,18 +231,25 @@ function cosine(a, b) {
   return dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-10)
 }
 
-function deduplicateBySimilarity(dishes, threshold) {
-  console.log(`\nDeduplicating ${dishes.length} dishes (threshold: ${threshold})...`)
+function deduplicateBySimilarity(dishes) {
+  console.log(`\nDeduplicating ${dishes.length} dishes (cuisine-aware thresholds)...`)
   const kept   = []
   const merged = []
 
   for (const dish of dishes) {
     let isDuplicate = false
     for (const keptDish of kept) {
+      const threshold = getDedupThreshold(dish.cuisine_type, keptDish.cuisine_type)
       const sim = cosine(dish.embedding, keptDish.embedding)
       if (sim >= threshold) {
         isDuplicate = true
-        merged.push({ duplicate: dish.name, kept: keptDish.name, similarity: sim.toFixed(3) })
+        merged.push({
+          duplicate: dish.name,
+          kept:      keptDish.name,
+          similarity: sim.toFixed(3),
+          threshold:  threshold.toFixed(2),
+          cuisines:  `${dish.cuisine_type} / ${keptDish.cuisine_type}`,
+        })
         // If the duplicate has a YouTube URL and the kept one doesn't, swap
         if (dish.youtube_url && !keptDish.youtube_url) {
           keptDish.youtube_url = dish.youtube_url
@@ -216,10 +263,17 @@ function deduplicateBySimilarity(dishes, threshold) {
 
   console.log(`  Removed ${merged.length} duplicates → ${kept.length} unique dishes`)
 
-  // Show a sample of what was merged
+  // Show a sample of what was merged — grouped by threshold used
+  const crossCuisine = merged.filter(m => parseFloat(m.threshold) >= DEDUP_CROSS_CUISINE)
+  const related      = merged.filter(m => parseFloat(m.threshold) === DEDUP_RELATED_CUISINE)
+  const same         = merged.filter(m => parseFloat(m.threshold) === DEDUP_SAME_CUISINE)
+  console.log(`  Same cuisine (${DEDUP_SAME_CUISINE}): ${same.length} merged`)
+  console.log(`  Related cuisine (${DEDUP_RELATED_CUISINE}): ${related.length} merged`)
+  console.log(`  Cross cuisine (${DEDUP_CROSS_CUISINE}): ${crossCuisine.length} merged`)
+
   console.log('\n  Sample merges:')
   merged.slice(0, 20).forEach(m =>
-    console.log(`    ${m.similarity} — "${m.duplicate}" → kept "${m.kept}"`)
+    console.log(`    ${m.similarity} [t=${m.threshold}] — "${m.duplicate}" → kept "${m.kept}" (${m.cuisines})`)
   )
 
   return { kept, merged }
@@ -246,14 +300,14 @@ async function main() {
   const withEmbeddings = await embedAllDishes(cleaned)
 
   // 5. Deduplicate
-  const { kept, merged: dupes } = deduplicateBySimilarity(withEmbeddings, DEDUP_THRESHOLD)
+  const { kept, merged: dupes } = deduplicateBySimilarity(withEmbeddings)
 
   // 6. Write output (embeddings included for runtime use)
   const output = {
     generated_at:       new Date().toISOString(),
     total:              kept.length,
     channels_included:  [...KEEP_CHANNELS, 'curated'],
-    dedup_threshold:    DEDUP_THRESHOLD,
+    dedup_thresholds:   { same_cuisine: DEDUP_SAME_CUISINE, related: DEDUP_RELATED_CUISINE, cross: DEDUP_CROSS_CUISINE },
     duplicates_removed: dupes.length,
     dishes: kept,
   }
