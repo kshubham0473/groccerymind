@@ -39,11 +39,11 @@ if (!YOUTUBE_KEY || !GEMINI_KEY) {
 
 // ── Channels ──────────────────────────────────────────────────────────────────
 const CHANNELS = [
-  { name: 'Hebbars Kitchen',   uploads: 'UUYNOe9bCJCg97IbcDllxFhg' },
-  { name: "Kabita's Kitchen",  uploads: 'UUmMHHMzF7_lCTTFXp6X3TTA' },
-  { name: 'Nisha Madhulika',   uploads: 'UUCijOziG2oNdh3_VFaWlyEw' },
-  { name: 'Ranveer Brar',      uploads: 'UUbIp4Z6eajPSHDPONxMHOWg' },
-  { name: 'Your Food Lab',     uploads: 'UUwKuSMuiHcEBMnNhJJixULA' },
+  { name: 'Hebbars Kitchen',   uploads: 'UUPPIsrNlEkaFQBk-4uNkOaw' },
+  { name: "Kabita's Kitchen",  uploads: 'UUChqsCRFePrP2X897iQkyAA' },
+  { name: 'Nisha Madhulika',   uploads: 'UUf0GuNEQXqDkUTCYiVyiONg' },
+  { name: 'Ranveer Brar',      uploads: 'UUEHCDn_BBnk3uTK1M64ptyw' },
+  { name: 'Your Food Lab',     uploads: 'UUe2JAC5FUfbxLCfAvBWmNJA' },
 ]
 
 const MAX_PER_CHANNEL = 500   // videos to pull per channel
