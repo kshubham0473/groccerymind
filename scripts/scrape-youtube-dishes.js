@@ -41,7 +41,8 @@ if (!YOUTUBE_KEY || !GEMINI_KEY) {
 const CHANNELS = [
   { name: 'Hebbars Kitchen',   uploads: 'UUPPIsrNlEkaFQBk-4uNkOaw' },
   { name: "Kabita's Kitchen",  uploads: 'UUChqsCRFePrP2X897iQkyAA' },
-  { name: 'Nisha Madhulika',   uploads: 'UUf0GuNEQXqDkUTCYiVyiONg' },
+  // Nisha Madhulika uses a legacy /user/ URL — find her ID via View Page Source on her channel
+  // then add: { name: 'Nisha Madhulika', uploads: 'UU...' },
   { name: 'Ranveer Brar',      uploads: 'UUEHCDn_BBnk3uTK1M64ptyw' },
   { name: 'Your Food Lab',     uploads: 'UUe2JAC5FUfbxLCfAvBWmNJA' },
 ]
@@ -55,7 +56,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 // ── Pre-filter: applied before sending to Gemini ──────────────────────────────
 // Words that indicate a title is a collection/category, not a single dish
 const COLLECTION_WORDS = [
-  'recipes', 'recipe', 'thali', 'platter', 'combo', 'twists', 'collection',
+  'recipes', 'thali', 'platter', 'combo', 'twists', 'collection',
   'series', 'episode', 'part 1', 'part 2', 'lunch box', 'meal prep',
   'batch cook', '| ep', 'vol.', 'vol ',
 ]
@@ -100,11 +101,11 @@ function shouldSkip(rawTitle) {
     .replace(/\s+/g, ' ')
     .trim()
 
-  // #shorts already handled upstream, but catch other YouTube noise
-  if (t.includes('#') && !t.includes('recipe')) return 'shorts/hashtag'
+  // Only skip actual YouTube Shorts (title literally contains #shorts or #short)
+  if (t.includes('#shorts') || t.includes('#short ') || t.endsWith('#short')) return 'shorts/hashtag'
 
-  // Too long — usually combo videos like "Aloo Paratha + Dal Makhani + ..."
-  if (rawTitle.length > 65) return 'too_long'
+  // Too long — only block extreme lengths (200+ chars = description leaked into title)
+  if (rawTitle.length > 200) return 'too_long'
 
   // Multiple dishes bundled with commas or &
   const commaCount = (rawTitle.match(/,/g) || []).length
