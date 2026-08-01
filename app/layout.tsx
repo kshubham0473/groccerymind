@@ -1,16 +1,10 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Lora } from 'next/font/google'
 import './globals.css'
 import { AppProvider } from '@/components/AppProvider'
 import BottomNavWrapper from '@/components/BottomNavWrapper'
 import { TourProvider } from '@/components/TourProvider'
 import TourOverlay from '@/components/TourOverlay'
 import { Analytics } from '@vercel/analytics/next'
-
-// Self-hosted + preloaded. Playfair Display and DM Sans were being downloaded
-// on every cold load and never rendered — removed.
-const inter = Inter({ subsets: ['latin'], weight: ['400','500','600','700'], variable: '--font-inter', display: 'swap' })
-const lora  = Lora({  subsets: ['latin'], weight: ['500','600','700'],       variable: '--font-lora',  display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'GroceryMind',
@@ -23,21 +17,25 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  viewportFit: 'cover',   // so env(safe-area-inset-*) actually resolves
-  themeColor: '#14372A',
+  themeColor: '#1B4332',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${lora.variable}`}>
+    <html lang="en">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body>
         <AppProvider>
           <TourProvider>
-            <div className="app-shell">
-              <main>{children}</main>
+            <div style={{ maxWidth: '430px', margin: '0 auto', minHeight: '100vh', background: 'var(--cream)' }}>
+              <main>
+                {children}
+              </main>
               <BottomNavWrapper />
             </div>
             <TourOverlay />

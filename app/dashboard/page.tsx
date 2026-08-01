@@ -4,9 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useApp } from '@/components/AppProvider'
 import { useTour } from '@/components/TourProvider'
 import { PantryItem, OrderItem, DailyLock, HouseholdPreferences } from '@/types'
-import { cachedFetch } from '@/lib/page-cache'
-import Icon from '@/components/Icon'
-import Card from '@/components/Card'
+import { cacheSet, cacheGet, cachedFetch } from '@/lib/page-cache'
 
 const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
 
@@ -36,12 +34,29 @@ function setMoodNudgeCache(data: any, dismissed = false) {
   try { localStorage.setItem(nudgeCacheKey(), JSON.stringify({ data, dismissed })) } catch {}
 }
 
+const QC_APPS: Record<string, { name: string; emoji: string; url: string }> = {
+  blinkit:   { name: 'Blinkit',         emoji: '🟡', url: 'https://blinkit.com' },
+  zepto:     { name: 'Zepto',           emoji: '🟣', url: 'https://www.zeptonow.com' },
+  swiggy:    { name: 'Swiggy Instamart',emoji: '🟠', url: 'https://www.swiggy.com/instamart' },
+  bigbasket: { name: 'BigBasket',       emoji: '🟢', url: 'https://www.bigbasket.com' },
+}
+
 // ── Insights from behaviour_log ───────────────────────────────────────────────
-interface BehaviourEvent { event_type: string; metadata: any; created_at: string }
-interface Insight { emoji: string; headline: string; subline: string }
+interface BehaviourEvent {
+  event_type: string
+  metadata: any
+  created_at: string
+}
+
+interface Insight {
+  emoji: string
+  headline: string
+  subline: string
+}
 
 function computeInsight(events: BehaviourEvent[]): Insight | null {
   if (!events.length) return null
+
   const now = Date.now()
   const DAY = 86400000
 
@@ -49,17 +64,25 @@ function computeInsight(events: BehaviourEvent[]): Insight | null {
   const locked   = events.filter(e => e.event_type === 'meal_locked')
   const discover = events.filter(e => e.event_type === 'discover_prompt')
 
-  const cookedDays = new Set(cooked.map(e => new Date(e.created_at).toDateString()))
+  // ── Priority 1: Cooking streak ──────────────────────────────────────────────
+  const cookedDays = new Set(
+    cooked.map(e => new Date(e.created_at).toDateString())
+  )
   let streak = 0
   for (let i = 0; i < 14; i++) {
     const d = new Date(now - i * DAY).toDateString()
     if (cookedDays.has(d)) streak++
-    else if (i > 0) break
+    else if (i > 0) break  // only count consecutive from today backwards
   }
   if (streak >= 3) {
-    return { emoji: '🔥', headline: `${streak}-day streak`, subline: `Cooked every day for ${streak} days` }
+    return {
+      emoji: '🔥',
+      headline: `${streak}-day cooking streak`,
+      subline: `You've cooked every day for ${streak} days straight`,
+    }
   }
 
+  // ── Priority 2: Most cooked dish (last 30 days) ─────────────────────────────
   const last30 = cooked.filter(e => now - new Date(e.created_at).getTime() < 30 * DAY)
   const dishCount: Record<string, number> = {}
   for (const e of last30) {
@@ -68,15 +91,25 @@ function computeInsight(events: BehaviourEvent[]): Insight | null {
   }
   const topDish = Object.entries(dishCount).sort((a, b) => b[1] - a[1])[0]
   if (topDish && topDish[1] >= 3) {
-    return { emoji: '👨‍🍳', headline: `${topDish[0]} — ${topDish[1]}x this month`, subline: 'Your household favourite right now' }
+    return {
+      emoji: '👨‍🍳',
+      headline: `${topDish[0]} — ${topDish[1]}x this month`,
+      subline: 'Your household favourite right now',
+    }
   }
 
-  const last7Days = new Set(Array.from({ length: 7 }, (_, i) => new Date(now - i * DAY).toDateString()))
-  const lockedThisWeek = new Set(
-    locked.filter(e => now - new Date(e.created_at).getTime() < 7 * DAY)
-          .map(e => `${e.metadata?.lock_date}_${e.metadata?.slot}`)
+  // ── Priority 3: Cook rate this week ─────────────────────────────────────────
+  const last7Days = new Set(
+    Array.from({ length: 7 }, (_, i) => new Date(now - i * DAY).toDateString())
   )
-  const cookedThisWeek = cooked.filter(e => last7Days.has(new Date(e.created_at).toDateString())).length
+  const lockedThisWeek = new Set(
+    locked
+      .filter(e => now - new Date(e.created_at).getTime() < 7 * DAY)
+      .map(e => `${e.metadata?.lock_date}_${e.metadata?.slot}`)
+  )
+  const cookedThisWeek = cooked.filter(
+    e => last7Days.has(new Date(e.created_at).toDateString())
+  ).length
   const lockedCount = lockedThisWeek.size
   if (lockedCount >= 3 && cookedThisWeek >= 2) {
     const pct = Math.round((cookedThisWeek / lockedCount) * 100)
@@ -87,11 +120,19 @@ function computeInsight(events: BehaviourEvent[]): Insight | null {
     }
   }
 
-  const discoverLast14 = discover.filter(e => now - new Date(e.created_at).getTime() < 14 * DAY)
+  // ── Priority 4: Discover usage ───────────────────────────────────────────────
+  const discoverLast14 = discover.filter(
+    e => now - new Date(e.created_at).getTime() < 14 * DAY
+  )
   if (discoverLast14.length >= 3) {
-    return { emoji: '✨', headline: `${discoverLast14.length} new dishes explored`, subline: 'In the last two weeks' }
+    return {
+      emoji: '✨',
+      headline: `${discoverLast14.length} new dishes explored`,
+      subline: 'In the last two weeks — variety is the spice',
+    }
   }
 
+  // ── Priority 5: Favourite slot ───────────────────────────────────────────────
   const lunchCount  = cooked.filter(e => e.metadata?.slot === 'lunch').length
   const dinnerCount = cooked.filter(e => e.metadata?.slot === 'dinner').length
   if (lunchCount + dinnerCount >= 6) {
@@ -104,14 +145,20 @@ function computeInsight(events: BehaviourEvent[]): Insight | null {
     }
   }
 
+  // ── Fallback: simple total ───────────────────────────────────────────────────
   if (cooked.length >= 2) {
-    return { emoji: '🍳', headline: `${cooked.length} meals cooked and logged`, subline: 'Insights get richer over time' }
+    return {
+      emoji: '🍳',
+      headline: `${cooked.length} meals cooked and logged`,
+      subline: 'Keep going — insights get richer over time',
+    }
   }
+
   return null
 }
 
 export default function Dashboard() {
-  const { user, household } = useApp()
+  const { user, household, logout } = useApp()
   const router = useRouter()
   const [lowItems, setLowItems] = useState<PantryItem[]>([])
   const [todaySlots, setTodaySlots] = useState<any[]>([])
@@ -123,6 +170,7 @@ export default function Dashboard() {
 
   const { triggerIfNew } = useTour()
 
+  // Mood nudge
   const [moodNudge, setMoodNudge] = useState<{ message: string; chips: string[] } | null>(null)
   const [moodNudgeDismissed, setMoodNudgeDismissed] = useState(true)
   const [moodNudgeLoading, setMoodNudgeLoading] = useState(false)
@@ -132,23 +180,32 @@ export default function Dashboard() {
   const hour = new Date().getHours()
 
   const displayName = prefs.member_names?.[user?.username || ''] || user?.username || ''
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const greeting = hour < 12 ? `Good morning${displayName ? ', ' + displayName : ''}`
+    : hour < 17 ? `Good afternoon${displayName ? ', ' + displayName : ''}`
+    : `Good evening${displayName ? ', ' + displayName : ''}`
 
   useEffect(() => {
+    // Fire-and-forget background estimate update
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
+
+    // Parallelise all dashboard data fetches with SWR cache
     const locksUrl = `/api/locks?from=${getTodayISO()}&days=1`
 
     Promise.all([
-      cachedFetch('dashboard:pantry',    () => fetch('/api/pantry').then(r => r.json()),      (d) => { if (Array.isArray(d)) setLowItems(d.filter((i: any) => i.stock_status !== 'good' && i.depletion_source === 'auto')) }),
-      cachedFetch('dashboard:meal-plan', () => fetch('/api/meal-plan').then(r => r.json()),   (d) => { if (Array.isArray(d)) setTodaySlots(d.filter((s: any) => s.day === today)) }),
-      cachedFetch('dashboard:orders',    () => fetch('/api/orders').then(r => r.json()),      (d) => { if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked))) }),
-      cachedFetch('dashboard:locks',     () => fetch(locksUrl).then(r => r.json()),           (d) => { if (Array.isArray(d)) setTodayLocks(d) }),
-      cachedFetch('dashboard:prefs',     () => fetch('/api/preferences').then(r => r.json()), (d) => { if (!d?.error) setPrefs(d) }),
-      cachedFetch('dashboard:log',       () => fetch('/api/log/summary').then(r => r.json()), (d) => { if (Array.isArray(d)) setInsight(computeInsight(d)) }),
+      cachedFetch('dashboard:pantry',    () => fetch('/api/pantry').then(r => r.json()),          (d) => { if (Array.isArray(d)) setLowItems(d.filter((i: any) => i.stock_status !== 'good' && i.depletion_source === 'auto')) }),
+      cachedFetch('dashboard:meal-plan', () => fetch('/api/meal-plan').then(r => r.json()),        (d) => { if (Array.isArray(d)) setTodaySlots(d.filter((s: any) => s.day === today)) }),
+      cachedFetch('dashboard:orders',    () => fetch('/api/orders').then(r => r.json()),           (d) => { if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked))) }),
+      cachedFetch('dashboard:locks',     () => fetch(locksUrl).then(r => r.json()),               (d) => { if (Array.isArray(d)) setTodayLocks(d) }),
+      cachedFetch('dashboard:prefs',     () => fetch('/api/preferences').then(r => r.json()),     (d) => { if (!d?.error) setPrefs(d) }),
+      cachedFetch('dashboard:log',       () => fetch('/api/log/summary').then(r => r.json()),     (d) => { if (Array.isArray(d)) setInsight(computeInsight(d)) }),
     ])
 
+    // Start tour for first-time users — only fires here (post-auth, on dashboard)
     triggerIfNew()
 
+    // (behaviour_log fetched in parallel above)
+
+    // Mood nudge
     const cached = getMoodNudgeCache()
     if (cached) {
       setMoodNudge(cached.data)
@@ -157,7 +214,10 @@ export default function Dashboard() {
       setMoodNudgeLoading(true)
       setMoodNudgeDismissed(false)
       fetch('/api/suggest/mood').then(r => r.json()).then(d => {
-        if (d.nudge) { setMoodNudge(d.nudge); setMoodNudgeCache(d.nudge, false) }
+        if (d.nudge) {
+          setMoodNudge(d.nudge)
+          setMoodNudgeCache(d.nudge, false)
+        }
         setMoodNudgeLoading(false)
       }).catch(() => setMoodNudgeLoading(false))
     }
@@ -191,142 +251,183 @@ export default function Dashboard() {
   const dinner = todaySlots.filter(s => s.slot === 'dinner')
   const lunchLock = todayLocks.find(l => l.slot === 'lunch')
   const dinnerLock = todayLocks.find(l => l.slot === 'dinner')
+  const qcApps = ((prefs.quickcommerce || []) as string[]).map((k: string) => QC_APPS[k]).filter(Boolean)
 
   if (!user) return null
 
-  const SLOTS = [
-    { slot: 'lunch',  label: 'Lunch',  lock: lunchLock,  options: lunch  },
-    { slot: 'dinner', label: 'Dinner', lock: dinnerLock, options: dinner },
-  ]
-
   return (
-    <div style={{ background: 'var(--surface)', minHeight: '100vh' }}>
-
-      {/* ── Header — one ink, flex actions, safe-area aware ── */}
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      {/* Header */}
       <div className="page-header" data-tour="header">
-        <div>
-          <p className="page-eyebrow">
-            {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-            {household?.name ? ` · ${household.name}` : ''}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          <h1 className="page-title">{greeting},<br />{displayName}</h1>
+          <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>{greeting}</h1>
+          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>{household?.name}</p>
         </div>
-        <a href="/settings" className="header-btn" aria-label="Settings"><Icon name="settings" size={21} strokeWidth={1.6} /></a>
+        <a href="/settings" style={{
+          position: 'absolute', top: 16, right: 20, zIndex: 2,
+          width: 36, height: 36, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          textDecoration: 'none', fontSize: 18, lineHeight: 1
+        }}>⚙️</a>
       </div>
 
-      <div className="page-body">
+      <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* ── PRIMARY: today's plan. The one hero on this screen. ── */}
-        <div data-tour="todays-decision" style={{
-          background: 'var(--green-deep)', borderRadius: 'var(--r-lg)',
-          padding: '14px var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s3)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--t-label)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.55)' }}>Today&apos;s plan</span>
-            <a href="/meal-plan" style={{ fontSize: 14, fontWeight: 600, color: 'var(--mint)' }}>Change</a>
+        {/* ── Today's Decision ── */}
+        <div className="card" data-tour="todays-decision" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>🔒</span>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-secondary)' }}>Today's Decision</span>
+            </div>
+            <a href="/meal-plan" style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 600, textDecoration: 'none' }}>Change →</a>
           </div>
-
-          {SLOTS.map(({ slot, label, lock, options }, i) => (
-            <div key={slot} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
-              {i > 0 && <div style={{ height: 1, background: 'rgba(255,255,255,0.12)' }} />}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 'var(--t-label)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.5)', margin: 0 }}>
-                    {label}{!lock && options.length > 0 ? ` · ${options.length} options` : ''}
-                  </p>
+          <div style={{ padding: 14 }}>
+            {!lunchLock && !dinnerLock && (lunch.length > 0 || dinner.length > 0) ? (
+              <a href="/meal-plan" style={{
+                display: 'block', textAlign: 'center', padding: '14px 20px',
+                borderRadius: 12, background: 'var(--green-deep)', color: 'white',
+                fontSize: 15, fontWeight: 600, textDecoration: 'none', marginBottom: 10
+              }}>Plan today →</a>
+            ) : null}
+            {[{ slot: 'lunch', label: '☀️ Lunch', lock: lunchLock, options: lunch },
+              { slot: 'dinner', label: '🌙 Dinner', lock: dinnerLock, options: dinner }
+            ].map(({ slot, label, lock, options }) => (
+              <div key={slot} style={{ marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, margin: 0 }}>{label}</p>
                   {lock ? (
-                    <p className="font-display" style={{ fontSize: 22, fontWeight: 600, color: '#fff', margin: '4px 0 0' }}>{lock.dish_name}</p>
+                    <p className="font-display" style={{ fontSize: 16, fontWeight: 600, color: 'var(--green-deep)', margin: '3px 0 0' }}>{lock.dish_name}</p>
                   ) : options.length > 0 ? (
-                    <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0' }}>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '3px 0 0' }}>
                       {options.slice(0, 2).map((s: any) => s.dish?.name).filter(Boolean).join(', ')}
-                      {options.length > 2 ? '…' : ''}
+                      {options.length > 2 && <span style={{ color: 'var(--text-muted)', opacity: 0.6 }}> +{options.length - 2}</span>}
                     </p>
                   ) : (
-                    <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', margin: '4px 0 0' }}>Nothing planned</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '3px 0 0' }}>Nothing planned</p>
                   )}
                 </div>
-
-                {lock
-                  ? cookedToday[slot] === lock.dish_name
-                    ? <span className="btn btn-sm" style={{ background: 'rgba(149,213,178,0.16)', color: 'var(--mint)', cursor: 'default' }}><Icon name="check" size={15} strokeWidth={2.4} />Cooked</span>
-                    : <button className="btn btn-on-dark" onClick={() => logCooked(slot, lock.dish_name)}><Icon name="check" size={16} strokeWidth={2.4} />Cooked</button>
-                  : <a href="/meal-plan" className="btn btn-on-dark">{options.length > 0 ? 'Choose' : 'Plan'}</a>
-                }
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Mood nudge — demoted from full gradient card to one quiet line ── */}
-        {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
-          moodNudgeLoading ? (
-            <div className="skeleton" style={{ height: 15, width: '70%', margin: '2px' }} />
-          ) : moodNudgeExpanded ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '2px' }}>
-              <p style={{ fontSize: 'var(--t-body)', color: 'var(--text-secondary)', margin: 0 }}>{moodNudge!.message}</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {moodNudge!.chips.map(chip => (
-                  <button key={chip} className="btn btn-sm btn-secondary" onClick={() => handleMoodChip(chip)}>{chip}</button>
-                ))}
-                <button className="btn btn-sm btn-ghost" onClick={() => { dismissMoodNudge(); router.push('/discover') }}>Explore all</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setMoodNudgeExpanded(true)} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '2px',
-              background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', minHeight: 44,
-            }}>
-              <Icon name="spark" size={16} style={{ color: 'var(--green-mid)' }} />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--t-body)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{moodNudge!.message}</span>
-              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--green-mid)', flexShrink: 0 }}>See ideas</span>
-            </button>
-          )
-        )}
-
-        {/* ── Running out — above the order list: time-sensitive beats a list ── */}
-        {lowItems.length > 0 && (
-          <Card title="Running out" icon="alert" tone="warn" count={lowItems.length}>
-            {lowItems.map(item => (
-              <div key={item.id} className="card-row">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: item.stock_status === 'finished' ? 'var(--red)' : 'var(--amber)' }} />
-                  <span style={{ fontSize: 'var(--t-item)', fontWeight: 500 }}>{item.name}</span>
-                  <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{item.stock_status}</span>
-                </span>
-                <button className="btn btn-sm btn-secondary" onClick={() => addToOrder(item.name)}>Order</button>
+                <div style={{ flexShrink: 0 }}>
+                  {lock
+                    ? cookedToday[slot] === lock.dish_name
+                      ? <span className="pill badge-good">✓ Cooked</span>
+                      : <button onClick={() => logCooked(slot, lock.dish_name)} style={{ padding: '6px 14px', borderRadius: 99, border: 'none', background: 'var(--green-deep)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cooked ✓</button>
+                    : options.length > 0
+                      ? <a href="/meal-plan" style={{ padding: '6px 12px', borderRadius: 99, border: '1px solid var(--border)', background: 'white', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>Choose →</a>
+                      : null
+                  }
+                </div>
               </div>
             ))}
-          </Card>
+          </div>
+        </div>
+
+        {/* ── Mood nudge (collapsed single-line) ── */}
+        {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
+          <div style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)', padding: moodNudgeExpanded ? 16 : '10px 16px', position: 'relative', cursor: moodNudgeExpanded ? 'default' : 'pointer' }} onClick={() => !moodNudgeExpanded && !moodNudgeLoading && setMoodNudgeExpanded(true)}>
+            <button onClick={(e) => { e.stopPropagation(); dismissMoodNudge() }} style={{ position: 'absolute', top: moodNudgeExpanded ? 10 : 8, right: 12, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18, lineHeight: 1, zIndex: 2 }}>×</button>
+            {moodNudgeLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="skeleton" style={{ height: 11, width: '70%', opacity: 0.3 }} />
+              </div>
+            ) : moodNudge && (
+              <>
+                {!moodNudgeExpanded ? (
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.4, margin: 0, paddingRight: 24, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {moodNudge.message}
+                  </p>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, marginBottom: 12, paddingRight: 20 }}>
+                      {moodNudge.message}
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {moodNudge.chips.map(chip => (
+                        <button key={chip} onClick={() => handleMoodChip(chip)} style={{
+                          padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
+                          background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                        }}>{chip}</button>
+                      ))}
+                      <button onClick={() => { dismissMoodNudge(); router.push('/discover') }} style={{
+                        padding: '7px 14px', borderRadius: 99, border: '1px solid rgba(255,255,255,0.25)',
+                        background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)',
+                        fontSize: 13, cursor: 'pointer'
+                      }}>Explore all →</button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         )}
 
         {/* ── Order list ── */}
-        <Card title={`Order list${orders.length ? ` · ${orders.length}` : ''}`} icon="orders" action="View" onAction={() => router.push('/orders')}>
-          <div style={{ padding: 'var(--s3) var(--s4)' }}>
-            {orders.length === 0
-              ? <p style={{ fontSize: 'var(--t-body)', color: 'var(--text-muted)', margin: 0 }}>Nothing to order right now</p>
-              : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {orders.slice(0, 5).map(o => (
-                    <span key={o.id} style={{
-                      padding: '7px 11px', borderRadius: 'var(--r-full)', fontSize: 14, fontWeight: 500,
-                      background: 'var(--sunken)', border: '1px solid var(--border)'
-                    }}>{o.item_name}</span>
-                  ))}
-                  {orders.length > 5 && (
-                    <span style={{ padding: '7px 11px', fontSize: 14, color: 'var(--text-muted)' }}>+{orders.length - 5} more</span>
-                  )}
-                </div>
-              )}
+        <a href="/orders" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>🛒</span>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-secondary)' }}>Order List</span>
+                {orders.length > 0 && <span className="pill badge-low" style={{ fontSize: 11 }}>{orders.length}</span>}
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 600 }}>View →</span>
+            </div>
+            <div style={{ padding: '10px 16px 14px' }}>
+              {orders.length === 0
+                ? <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nothing to order right now</p>
+                : <>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {orders.slice(0, 5).map(o => (
+                        <span key={o.id} style={{ padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600, background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>{o.item_name}</span>
+                      ))}
+                    </div>
+                    {orders.length > 5 && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>+{orders.length - 5} more</p>}
+                  </>
+              }
+            </div>
           </div>
-        </Card>
+        </a>
 
-        {/* ── Insight — the one place emoji still earns its keep ── */}
+        {/* ── Pantry alerts ── */}
+        {lowItems.length > 0 && (
+          <div className="card" style={{ overflow: 'hidden', background: 'rgba(217, 119, 6, 0.04)' }}>
+            <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>⚠️</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--amber)' }}>Pantry Alerts · {lowItems.length}</span>
+            </div>
+            <div style={{ padding: '4px 0' }}>
+              {lowItems.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 16px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: item.stock_status === 'finished' ? 'var(--red)' : 'var(--amber)', flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{item.name}</span>
+                    <span className={`pill ${item.stock_status === 'finished' ? 'badge-finished' : 'badge-low'}`} style={{ fontSize: 11 }}>{item.stock_status}</span>
+                  </div>
+                  <button onClick={() => addToOrder(item.name)} style={{ background: 'var(--green-light)', color: 'var(--green-deep)', border: 'none', padding: '5px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ Order</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Household insight card ── */}
         {insight && (
-          <div data-tour="insight-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 4px' }}>
-            <span style={{ fontSize: 22 }}>{insight.emoji}</span>
-            <p style={{ fontSize: 'var(--t-body)', color: 'var(--text-secondary)', margin: 0 }}>
-              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{insight.headline}</span> — {insight.subline}
-            </p>
+          <div data-tour="insight-card" style={{
+            borderRadius: 16, padding: '14px 16px',
+            background: 'white', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', gap: 14,
+            boxShadow: 'var(--shadow)'
+          }}>
+            <span style={{ fontSize: 28, flexShrink: 0 }}>{insight.emoji}</span>
+            <div style={{ minWidth: 0 }}>
+              <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{insight.headline}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>{insight.subline}</p>
+            </div>
           </div>
         )}
 
