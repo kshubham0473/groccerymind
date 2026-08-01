@@ -5,6 +5,10 @@ import { dishImage, ThumbSize } from '@/lib/dish-image'
 /**
  * Dish photograph with a typographic fallback, so a missing or dead
  * thumbnail reads as a design choice rather than a broken image.
+ *
+ * The fallback is a serif monogram at every size — one tile, one behaviour.
+ * (2a rendered the full dish name at small sizes, which fell below the 12px
+ * type floor on a 46px thumb.)
  */
 export default function DishImage({
   name, youtubeUrl, height, size = 'lg', style,
@@ -22,10 +26,10 @@ export default function DishImage({
     return (
       <div
         className="dish-fallback"
-        style={{ height, fontSize: height > 100 ? 22 : 13, ...style }}
+        style={{ height, fontSize: Math.round(height * 0.38), ...style }}
         aria-label={name}
       >
-        {name}
+        {(name || '?').trim().charAt(0).toUpperCase()}
       </div>
     )
   }

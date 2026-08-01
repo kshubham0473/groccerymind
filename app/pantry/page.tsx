@@ -3,16 +3,11 @@ import { useEffect, useState } from 'react'
 import { cachedFetch, cacheInvalidate } from '@/lib/page-cache'
 import { PantryItem, PantryTier, StockStatus } from '@/types'
 
-const TIERS: { key: PantryTier; label: string; emoji: string }[] = [
-  { key: 'fresh',  label: 'Fresh & Daily',   emoji: '🥬' },
-  { key: 'weekly', label: 'Weekly Supplies', emoji: '📦' },
-  { key: 'staple', label: 'Monthly Staples', emoji: '🏪' },
+const TIERS: { key: PantryTier; label: string }[] = [
+  { key: 'fresh',  label: 'Fresh & daily' },
+  { key: 'weekly', label: 'Weekly'        },
+  { key: 'staple', label: 'Staples'       },
 ]
-const STATUS_STYLE: Record<StockStatus, { dot: string; cls: string; label: string }> = {
-  good:     { dot: '#22C55E', cls: 'badge-good',     label: 'Good'     },
-  low:      { dot: '#D97706', cls: 'badge-low',      label: 'Low'      },
-  finished: { dot: '#DC2626', cls: 'badge-finished', label: 'Finished' },
-}
 
 // Smart depletion day defaults by category
 const DEPLETION_DEFAULTS: Record<string, { days: number; tier: PantryTier }> = {
@@ -57,17 +52,35 @@ function autoCategory(name: string): string | null {
   return null
 }
 
+const TIER_WORD: Record<string, string> = { fresh: 'Fresh', weekly: 'Weekly', staple: 'Staple' }
+
+/** One honest sentence about why this item is on the attention list. */
+function reasonFor(i: PantryItem): string {
+  const tier = TIER_WORD[i.tier] || 'Pantry'
+  if (i.stock_status === 'finished') return `${tier} · usually lasts ${i.depletion_days} days`
+  const since = (i as any).days_since_restock
+  if (typeof since === 'number') return `${tier} · ${since} days since restock`
+  return `${tier} · refreshes every ${i.depletion_days} days`
+}
+
+/** Names as prose: first four, then a count. The long tail is not a list. */
+function shelfLine(names: { name: string; low: boolean }[]) {
+  const head = names.slice(0, 4)
+  const rest = names.length - head.length
+  return { head, rest }
+}
+
 export default function PantryPage() {
   const [items, setItems] = useState<PantryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string|null>(null)
   const [search, setSearch] = useState('')
-  const [filterTier, setFilterTier] = useState<'all'|PantryTier>('all')
   const [actionItem, setActionItem] = useState<PantryItem|null>(null)
   const [adding, setAdding] = useState(false)
   const [newItem, setNewItem] = useState({ name: '', tier: 'fresh' as PantryTier, category: 'Vegetables', depletion_days: 5 })
   const [saving, setSaving] = useState(false)
   const [autoCatApplied, setAutoCatApplied] = useState(false)
+  const [addedAll, setAddedAll] = useState(false)
 
   useEffect(() => {
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
@@ -77,8 +90,7 @@ export default function PantryPage() {
       (d, isStale) => {
         if (!d) { setFetchError('Network error'); setLoading(false); return }
         if (Array.isArray(d)) { setItems(d) } else { setFetchError(d.error || 'Failed to load pantry') }
-        if (!isStale) setLoading(false)
-        else setLoading(false) // render stale immediately
+        setLoading(false)
       }
     ).catch(e => { setFetchError(e.message || 'Network error'); setLoading(false) })
   }, [])
@@ -127,204 +139,247 @@ export default function PantryPage() {
     await fetch('/api/pantry', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
   }
 
-  const filtered = items.filter(i =>
-    (filterTier === 'all' || i.tier === filterTier) &&
-    i.name.toLowerCase().includes(search.toLowerCase())
-  )
-  const alertCount = items.filter(i => i.stock_status !== 'good').length
+  /** New in patch 3 — the whole attention list in one action. */
+  async function addAllToList(list: PantryItem[]) {
+    setAddedAll(true)
+    cacheInvalidate('orders:items', 'dashboard:orders')
+    for (const i of list) {
+      await fetch('/api/orders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_name: i.name, source: 'pantry' })
+      }).catch(() => {})
+    }
+  }
 
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}><span style={{ fontSize: 28 }}>🥬</span></div>
+  const searching = search.trim().length > 0
+  const matches = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+
+  const attention = items
+    .filter(i => i.stock_status !== 'good')
+    .sort((a, b) => (a.stock_status === 'finished' ? 0 : 1) - (b.stock_status === 'finished' ? 0 : 1))
+
+  const headline =
+    attention.length === 0 ? 'Everything in stock' :
+    attention.length === 1 ? 'One thing needs attention' :
+    `${attention.length} need attention`
+
+  if (loading) return (
+    <div className="screen"><div className="screen-body" style={{ paddingTop: 40, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="skeleton" style={{ height: 15, width: 90 }} />
+      <div className="skeleton" style={{ height: 34, width: '70%' }} />
+      <div className="skeleton" style={{ height: 1, width: '100%' }} />
+      <div className="skeleton" style={{ height: 54, width: '100%' }} />
+      <div className="skeleton" style={{ height: 54, width: '100%' }} />
+    </div></div>
+  )
+
   if (fetchError) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', padding: 24, textAlign: 'center' }}>
-      <span style={{ fontSize: 32, marginBottom: 12 }}>⚠️</span>
-      <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Pantry failed to load</p>
-      <p style={{ fontSize: 13, color: 'var(--red)', background: 'var(--red-light)', padding: '8px 14px', borderRadius: 10, fontFamily: 'monospace' }}>{fetchError}</p>
-    </div>
+    <div className="screen"><div className="screen-body" style={{ paddingTop: 40 }}>
+      <p className="font-display" style={{ fontSize: 'var(--t-page)', fontWeight: 600, margin: 0 }}>The kitchen didn&apos;t load</p>
+      <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '10px 0 0' }}>{fetchError}</p>
+      <button className="action" style={{ marginTop: 22 }} onClick={() => location.reload()}>Try again</button>
+    </div></div>
   )
 
   return (
-    <div style={{ background: '#FAF8F5', minHeight: '100vh' }}>
-      <div className="page-header" style={{ background: 'linear-gradient(160deg, #3A2A1E 0%, #5C4A3A 100%)' }}>
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Kitchen</p>
-          <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Pantry</h1>
-          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>
-            {items.length} items{alertCount > 0 ? ` · ⚠️ ${alertCount} need attention` : ' · all good'}
+    <div className="screen">
+
+      <div className="screen-head">
+        <span className="label">{items.length} items</span>
+        <button className="word tap" onClick={() => setAdding(true)}>Add</button>
+      </div>
+
+      <div className="screen-body">
+
+        <div style={{ paddingTop: 22 }}>
+          <p className="font-display" style={{ fontSize: 'var(--t-page)', lineHeight: 1.15, fontWeight: 600, margin: 0 }}>
+            {headline}
+          </p>
+          <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '8px 0 0' }}>
+            {attention.length === 0
+              ? `All ${items.length} items were fine as of this morning.`
+              : 'Everything else was fine as of this morning.'}
           </p>
         </div>
-      </div>
 
-      <div className="page-body">
-        {/* Search */}
-        <div style={{ position: 'relative', marginBottom: 12 }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pantry..."
-            style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'white', fontFamily: 'inherit' }} />
-          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: 14 }}>🔍</span>
-        </div>
+        {/* Search only earns its place on a long pantry. */}
+        {items.length > 24 && (
+          <div style={{ paddingTop: 20 }}>
+            <input className="field" value={search} onChange={e => setSearch(e.target.value)} placeholder="Find an item" />
+          </div>
+        )}
 
-        {/* Tier filter */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 16, paddingBottom: 2 }}>
-          {([{ key: 'all', label: 'All', emoji: '🏠' }, ...TIERS] as any[]).map(f => (
-            <button key={f.key} onClick={() => setFilterTier(f.key)} style={{
-              flexShrink: 0, padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-              background: filterTier === f.key ? 'var(--green-mid)' : 'white',
-              color: filterTier === f.key ? 'white' : 'var(--text-secondary)',
-              boxShadow: filterTier === f.key ? '0 2px 8px rgba(45,106,79,0.25)' : 'var(--shadow)'
-            }}>{f.emoji} {f.label}</button>
-          ))}
-        </div>
-
-        {/* Shelf sections */}
-        <div data-tour="pantry-shelf">
-        {TIERS.map(tier => {
-          const tierItems = filtered.filter(i => i.tier === tier.key)
-          if (filterTier !== 'all' && filterTier !== tier.key) return null
-          return (
-            <div key={tier.key} style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <span style={{ fontSize: 14 }}>{tier.emoji}</span>
-                <span className="font-display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{tier.label}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>({tierItems.length})</span>
-              </div>
-              <div className="card" style={{ padding: '10px 12px 14px' }}>
-                {tierItems.length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '10px 0' }}>Empty shelf</p>
-                ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 10 }}>
-                    {tierItems.map(item => {
-                      const ss = STATUS_STYLE[item.stock_status]
-                      return (
-                        <button key={item.id} onClick={() => setActionItem(item)} style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 5,
-                          padding: '6px 10px', borderRadius: 10,
-                          border: `1px solid ${item.stock_status === 'good' ? 'var(--border)' : ss.dot + '44'}`,
-                          background: item.stock_status === 'good' ? 'white' : ss.dot + '15',
-                          cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                          color: item.stock_status === 'good' ? 'var(--text-primary)' : ss.dot
-                        }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.dot, flexShrink: 0, display: 'inline-block' }} />
-                          {item.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-                <div style={{ height: 6, background: 'linear-gradient(180deg, #D4B896 0%, #B8956E 100%)', borderRadius: 3, boxShadow: '0 2px 4px rgba(139,111,71,0.3)' }} />
-              </div>
-            </div>
-          )
-        })}
-
-        </div>
-        <button data-tour="pantry-add" onClick={() => setAdding(true)} style={{
-          width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed var(--green-light)',
-          background: 'none', color: 'var(--green-mid)', fontSize: 13, fontWeight: 600, cursor: 'pointer'
-        }}>+ Add item to pantry</button>
-      </div>
-
-      {/* Action sheet */}
-      {actionItem && (
-        <div onClick={() => setActionItem(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 36px', border: 'none' }}>
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
-            <p className="font-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>{actionItem.name}</p>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>{actionItem.tier} · {actionItem.category} · refreshes every {actionItem.depletion_days} days</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(['good','low','finished'] as StockStatus[]).map(status => {
-                const ss = STATUS_STYLE[status]
-                const active = actionItem.stock_status === status
-                return (
-                  <button key={status} onClick={() => updateStatus(actionItem.id, status)} style={{
-                    padding: '13px 16px', borderRadius: 14, cursor: 'pointer', textAlign: 'left',
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    border: `1px solid ${active ? ss.dot + '44' : 'var(--border)'}`,
-                    background: active ? ss.dot + '15' : 'white',
-                  }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: ss.dot, flexShrink: 0, display: 'inline-block' }} />
-                    <span style={{ fontSize: 14, fontWeight: 600, color: active ? ss.dot : 'var(--text-primary)' }}>
-                      {status === 'good' ? '✅ Well stocked' : status === 'low' ? '⚠️ Running low' : '🚫 Finished — add to order list'}
+        {searching ? (
+          <div style={{ paddingTop: 24 }}>
+            <p className="label" style={{ margin: '0 0 12px' }}>{matches.length} found</p>
+            <div className="rule" />
+            {matches.map(item => (
+              <div key={item.id}>
+                <button className="row" onClick={() => setActionItem(item)}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <p className="row-title">{item.name}</p>
+                    <p className="row-meta">{reasonFor(item)}</p>
+                  </span>
+                  {item.stock_status !== 'good' && (
+                    <span className={item.stock_status === 'finished' ? 'status status-out' : 'status status-low'}>
+                      {item.stock_status === 'finished' ? 'Finished' : 'Low'}
                     </span>
+                  )}
+                </button>
+                <div className="rule" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* ── Needs attention — full rows, a reason, a word ─────── */}
+            {attention.length > 0 && (
+              <div style={{ paddingTop: 26 }}>
+                <div className="rule" />
+                {attention.map(item => (
+                  <div key={item.id}>
+                    <button className="row" onClick={() => setActionItem(item)}>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <p className="row-title">{item.name}</p>
+                        <p className="row-meta">{reasonFor(item)}</p>
+                      </span>
+                      <span className={item.stock_status === 'finished' ? 'status status-out' : 'status status-low'}>
+                        {item.stock_status === 'finished' ? 'Finished' : 'Low'}
+                      </span>
+                    </button>
+                    <div className="rule" />
+                  </div>
+                ))}
+                <button className="action-sm" style={{ width: '100%', marginTop: 16 }}
+                        disabled={addedAll} onClick={() => addAllToList(attention)}>
+                  {addedAll
+                    ? 'Added to the list'
+                    : `Add all ${attention.length === 1 ? 'of it' : attention.length} to the list`}
+                </button>
+              </div>
+            )}
+
+            {/* ── The healthy remainder, as three sentences ─────────── */}
+            {TIERS.map(tier => {
+              const tierItems = items.filter(i => i.tier === tier.key)
+              if (tierItems.length === 0) return null
+              const { head, rest } = shelfLine(tierItems.map(i => ({ name: i.name, low: i.stock_status !== 'good' })))
+              return (
+                <div key={tier.key} style={{ paddingTop: 26 }}>
+                  <p className="label" style={{ margin: '0 0 8px' }}>{tier.label} · {tierItems.length}</p>
+                  <p className="tail">
+                    {head.map((n, idx) => (
+                      <span key={n.name}>
+                        {n.low ? <em>{n.name}</em> : n.name}{idx < head.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                    {rest > 0 ? `, +${rest} more.` : '.'}
+                  </p>
+                </div>
+              )
+            })}
+          </>
+        )}
+      </div>
+
+      {/* ── Action sheet ───────────────────────────────────────────── */}
+      {actionItem && (
+        <div className="sheet-scrim" onClick={() => setActionItem(null)}>
+          <div className="sheet" onClick={e => e.stopPropagation()}>
+            <p className="sheet-title">{actionItem.name}</p>
+            <p className="sheet-sub">{reasonFor(actionItem)}</p>
+
+            <div style={{ paddingTop: 20 }}>
+              <div className="rule" />
+              {([
+                { s: 'good'     as StockStatus, t: 'Well stocked',  m: 'No action needed' },
+                { s: 'low'      as StockStatus, t: 'Running low',   m: 'Flagged on the home screen' },
+                { s: 'finished' as StockStatus, t: 'Finished',      m: 'Goes straight onto the list' },
+              ]).map(({ s, t, m }) => (
+                <div key={s}>
+                  <button className="row" onClick={() => updateStatus(actionItem.id, s)}>
+                    <span style={{ flex: 1 }}>
+                      <p className="row-title" style={{ fontSize: 18 }}>{t}</p>
+                      <p className="row-meta">{m}</p>
+                    </span>
+                    {actionItem.stock_status === s && <span className="status status-low">Now</span>}
                   </button>
-                )
-              })}
-              <button onClick={() => markRestocked(actionItem.id)} style={{ padding: '13px 16px', borderRadius: 14, border: '1px solid var(--green-light)', background: 'var(--green-pale)', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--green-deep)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>🔄 Just restocked</span>
-                {actionItem.avg_depletion_days && actionItem.order_count && actionItem.order_count >= 3
-                  ? <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--green-mid)' }}>· learned avg {actionItem.avg_depletion_days}d</span>
-                  : <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>· resets depletion clock</span>
-                }
+                  <div className="rule" />
+                </div>
+              ))}
+              <button className="row" onClick={() => markRestocked(actionItem.id)}>
+                <span style={{ flex: 1 }}>
+                  <p className="row-title" style={{ fontSize: 18 }}>Just restocked</p>
+                  <p className="row-meta">
+                    {actionItem.avg_depletion_days && actionItem.order_count && actionItem.order_count >= 3
+                      ? `Resets the clock — learned average ${actionItem.avg_depletion_days} days`
+                      : 'Resets the depletion clock'}
+                  </p>
+                </span>
               </button>
-              <button onClick={() => deleteItem(actionItem.id)} style={{ padding: '13px 16px', borderRadius: 14, border: '1px solid var(--red-light)', background: 'var(--red-light)', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--red)' }}>
-                🗑️ Remove from pantry
-              </button>
+              <div className="rule" />
             </div>
+
+            <button className="action-sm" style={{ width: '100%', marginTop: 18, borderColor: 'var(--rule)', color: 'var(--finished)' }}
+                    onClick={() => deleteItem(actionItem.id)}>
+              Remove from the kitchen
+            </button>
           </div>
         </div>
       )}
 
-      {/* Add item sheet */}
+      {/* ── Add sheet ──────────────────────────────────────────────── */}
       {adding && (
-        <div onClick={() => { setAdding(false); setAutoCatApplied(false); setNewItem({ name: '', tier: 'fresh', category: 'Vegetables', depletion_days: 5 }) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 430, margin: '0 auto', borderRadius: '24px 24px 0 0', padding: '20px 20px 36px', border: 'none' }}>
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
-            <p className="font-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Add to Pantry</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input autoFocus value={newItem.name} onChange={e => {
+        <div className="sheet-scrim" onClick={() => { setAdding(false); setAutoCatApplied(false); setNewItem({ name: '', tier: 'fresh', category: 'Vegetables', depletion_days: 5 }) }}>
+          <div className="sheet" onClick={e => e.stopPropagation()}>
+            <p className="sheet-title">Add to the kitchen</p>
+
+            <input autoFocus className="field" style={{ marginTop: 18 }} value={newItem.name}
+              placeholder="Item name"
+              onChange={e => {
                 const name = e.target.value
                 setNewItem(p => ({ ...p, name }))
                 const cat = autoCategory(name)
-                if (cat && cat !== newItem.category) {
-                  onCategoryChange(cat)
-                  setAutoCatApplied(true)
-                } else if (!cat) {
-                  setAutoCatApplied(false)
-                }
-              }}
-                placeholder="Item name (e.g. Curd)"
-                style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
+                if (cat && cat !== newItem.category) { onCategoryChange(cat); setAutoCatApplied(true) }
+                else if (!cat) setAutoCatApplied(false)
+              }} />
 
-              {/* Category selector — drives tier + days automatically */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)', margin: 0 }}>Category</p>
-                  {autoCatApplied && <span style={{ fontSize: 11, color: 'var(--green-mid)', fontWeight: 600 }}>✨ Auto-detected</span>}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  {CATEGORIES.map(cat => (
-                    <button key={cat} onClick={() => { onCategoryChange(cat); setAutoCatApplied(false) }} style={{
-                      padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                      fontSize: 12, fontWeight: 600, textAlign: 'left',
-                      background: newItem.category === cat ? 'var(--green-mid)' : 'white',
-                      color: newItem.category === cat ? 'white' : 'var(--text-secondary)',
-                      boxShadow: 'var(--shadow)'
-                    }}>{cat}</button>
-                  ))}
-                </div>
+            <div style={{ paddingTop: 22 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span className="label">Category</span>
+                {autoCatApplied && <span className="label" style={{ color: 'var(--ochre)' }}>Detected</span>}
               </div>
-
-              {/* Auto-filled hint */}
-              <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--green-pale)', border: '1px solid var(--green-light)', display: 'flex', gap: 16 }}>
-                <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Shelf</p>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--green-deep)', textTransform: 'capitalize' }}>{newItem.tier}</p>
-                </div>
-                <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Lasts approx.</p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input type="number" value={newItem.depletion_days}
-                      onChange={e => setNewItem(p => ({ ...p, depletion_days: +e.target.value }))}
-                      style={{ width: 48, padding: '4px 8px', borderRadius: 8, border: '1px solid var(--green-light)', fontSize: 13, fontWeight: 700, outline: 'none', textAlign: 'center', fontFamily: 'inherit', color: 'var(--green-deep)', background: 'white' }} />
-                    <span style={{ fontSize: 13, color: 'var(--green-deep)', fontWeight: 600 }}>days</span>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 14px' }}>
+                {CATEGORIES.map(cat => (
+                  <button key={cat}
+                    className={newItem.category === cat ? 'word tap' : 'word word-quiet tap'}
+                    onClick={() => { onCategoryChange(cat); setAutoCatApplied(false) }}>
+                    {cat}
+                  </button>
+                ))}
               </div>
-
-              <button onClick={addItem} disabled={saving || !newItem.name.trim()} style={{
-                padding: '13px', borderRadius: 12, border: 'none',
-                background: saving || !newItem.name.trim() ? 'var(--green-soft)' : 'var(--green-mid)',
-                color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer'
-              }}>{saving ? 'Adding...' : 'Add to Pantry'}</button>
             </div>
+
+            <div style={{ paddingTop: 24, display: 'flex', gap: 32 }}>
+              <div>
+                <p className="label" style={{ margin: '0 0 6px' }}>Shelf</p>
+                <p className="font-display" style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>{TIER_WORD[newItem.tier]}</p>
+              </div>
+              <div>
+                <p className="label" style={{ margin: '0 0 6px' }}>Lasts about</p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                  <input type="number" value={newItem.depletion_days}
+                    onChange={e => setNewItem(p => ({ ...p, depletion_days: +e.target.value }))}
+                    className="field"
+                    style={{ width: 52, fontFamily: 'var(--font-lora), Georgia, serif', fontSize: 20, fontWeight: 600, padding: '2px 0' }} />
+                  <span style={{ fontSize: 15, color: 'var(--ink-soft)' }}>days</span>
+                </div>
+              </div>
+            </div>
+
+            <button className="action" style={{ marginTop: 26 }} onClick={addItem} disabled={saving || !newItem.name.trim()}>
+              {saving ? 'Adding…' : 'Add to the kitchen'}
+            </button>
           </div>
         </div>
       )}

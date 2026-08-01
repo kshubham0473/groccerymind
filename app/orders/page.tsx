@@ -7,15 +7,24 @@ import { useApp } from '@/components/AppProvider'
 
 type Status = 'pending' | 'maybe' | 'ordered'
 
-const SOURCE_LABEL: Record<string, string> = {
-  manual: '', pantry: '🥬', meal_plan: '📋', smart: '✨', discover: '🍳'
+/** Why an item is on the list — a word, not an emoji. */
+const SOURCE_WORD: Record<string, string> = {
+  pantry:    'From the kitchen',
+  meal_plan: 'For the plan',
+  smart:     'Suggested',
+  discover:  'For a dish',
+  manual:    '',
 }
 
-const QC_APPS: Record<string, { name: string; emoji: string; url: string }> = {
-  blinkit:   { name: 'Blinkit',    emoji: '🟡', url: 'https://blinkit.com' },
-  zepto:     { name: 'Zepto',      emoji: '🟣', url: 'https://www.zeptonow.com' },
-  swiggy:    { name: 'Swiggy Instamart', emoji: '🟠', url: 'https://www.swiggy.com/instamart' },
-  bigbasket: { name: 'BigBasket',  emoji: '🟢', url: 'https://www.bigbasket.com' },
+const QC_APPS: Record<string, { name: string; url: string }> = {
+  blinkit:   { name: 'Blinkit',   url: 'https://blinkit.com' },
+  zepto:     { name: 'Zepto',     url: 'https://www.zeptonow.com' },
+  swiggy:    { name: 'Instamart', url: 'https://www.swiggy.com/instamart' },
+  bigbasket: { name: 'BigBasket', url: 'https://www.bigbasket.com' },
+}
+
+function joinNames(names: string[]) {
+  return names.join(', ')
 }
 
 export default function OrdersPage() {
@@ -26,13 +35,11 @@ export default function OrdersPage() {
   const [adding, setAdding] = useState(false)
   const [suggestions, setSuggestions] = useState<{ item: string; reason: string }[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(true)
-  const [showSuggestions, setShowSuggestions] = useState(false)
   const [addedSuggestions, setAddedSuggestions] = useState<Set<string>>(new Set())
   const [markingAll, setMarkingAll] = useState(false)
-  const [showMaybe, setShowMaybe] = useState(false)
-  const [showOrdered, setShowOrdered] = useState(false)
   const [frequentItems, setFrequentItems] = useState<string[]>([])
   const [prefs, setPrefs] = useState<any>({})
+  const [actionItem, setActionItem] = useState<any>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -40,7 +47,6 @@ export default function OrdersPage() {
       cachedFetch('orders:items',    () => fetch('/api/orders').then(r => r.json()),          (d) => { if (Array.isArray(d)) { setItems(d); setLoading(false) } }),
       cachedFetch('orders:prefs',    () => fetch('/api/preferences').then(r => r.json()),     (d) => { if (!d?.error) setPrefs(d) }),
       cachedFetch('orders:frequent', () => fetch('/api/orders/frequent').then(r => r.json()),(d) => { if (Array.isArray(d)) setFrequentItems(d) }),
-      // Suggestions not cached — AI response, always fresh
       fetch('/api/suggest/orders').then(r => r.json()).then(d => {
         setSuggestions(d.suggestions || [])
         setSuggestionsLoading(false)
@@ -58,7 +64,6 @@ export default function OrdersPage() {
       }, payload => {
         if (payload.eventType === 'INSERT') {
           const r = payload.new as OrderItem
-          // Strict dedup — only add if id genuinely not present
           setItems(p => p.some(i => i.id === r.id) ? p : [...p, {
             ...r, added_by_username: r.added_by === user.id ? user.username : 'partner'
           }])
@@ -81,22 +86,20 @@ export default function OrdersPage() {
       body: JSON.stringify({ item_name: newItem.trim() })
     })
     const d = await res.json()
-    // Only add manually — realtime will NOT fire for our own inserts if we handle it here
     if (!d.error) {
       setItems(p => p.some(i => i.id === d.id) ? p : [...p, d])
-      setNewItem('')
-      // Remove from frequent chips if it was there
       setFrequentItems(p => p.filter(f => f.toLowerCase() !== newItem.trim().toLowerCase()))
+      setNewItem('')
     }
     setAdding(false)
   }
 
-  async function addFrequent(name: string) {
+  async function addNamed(name: string, source = 'manual') {
     setFrequentItems(p => p.filter(f => f !== name))
     cacheInvalidate('orders:items', 'dashboard:orders')
     const res = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_name: name, source: 'manual' })
+      body: JSON.stringify({ item_name: name, source })
     })
     const d = await res.json()
     if (!d.error) setItems(p => p.some(i => i.id === d.id) ? p : [...p, d])
@@ -104,6 +107,7 @@ export default function OrdersPage() {
 
   async function setStatus(id: string, status: Status) {
     setItems(p => p.map(i => i.id === id ? { ...i, status, is_checked: status === 'ordered' } as any : i))
+    setActionItem(null)
     cacheInvalidate('orders:items', 'dashboard:orders')
     await fetch('/api/orders', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -113,6 +117,7 @@ export default function OrdersPage() {
 
   async function deleteItem(id: string) {
     setItems(p => p.filter(i => i.id !== id))
+    setActionItem(null)
     cacheInvalidate('orders:items', 'dashboard:orders')
     await fetch('/api/orders', {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' },
@@ -141,274 +146,199 @@ export default function OrdersPage() {
   }
 
   async function addSuggestion(item: string) {
-    // Mark immediately to prevent double-tap
     setAddedSuggestions(p => new Set([...p, item]))
-    cacheInvalidate('orders:items', 'dashboard:orders')
-    const res = await fetch('/api/orders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_name: item, source: 'smart' })
-    })
-    const d = await res.json()
-    // Only add to local state if not already present (realtime might beat us)
-    if (!d.error) setItems(p => p.some(i => i.id === d.id) ? p : [...p, d])
+    await addNamed(item, 'smart')
   }
 
   const pending = items.filter(i => (i as any).status === 'pending' || (!((i as any).status) && !i.is_checked))
   const maybe   = items.filter(i => (i as any).status === 'maybe')
   const ordered = items.filter(i => (i as any).status === 'ordered' || (!(i as any).status && i.is_checked))
-  const qcApps = ((prefs.quickcommerce || []) as string[]).map((k: string) => QC_APPS[k]).filter(Boolean)
+  const qcApps  = ((prefs.quickcommerce || []) as string[]).map((k: string) => QC_APPS[k]).filter(Boolean)
 
-  // Filter frequent items to only show ones not already pending
   const pendingNames = new Set(pending.map(p => p.item_name.toLowerCase()))
   const visibleFrequent = frequentItems.filter(f => !pendingNames.has(f.toLowerCase())).slice(0, 6)
+  const openSuggestions = suggestions.filter(s => !addedSuggestions.has(s.item) && !pendingNames.has(s.item.toLowerCase())).slice(0, 3)
+
+  // The partner's most recent addition, for the subhead.
+  const lastByPartner = [...pending].reverse().find((i: any) => i.added_by_username && i.added_by_username !== user?.username)
+
+  const headline =
+    pending.length === 0 ? 'Nothing to order' :
+    pending.length === 1 ? 'One to order' :
+    `${pending.length} to order`
+
+  function whyLine(item: any): string {
+    const src = SOURCE_WORD[item.source] || ''
+    if (src) return src
+    if (item.added_by_username && item.added_by_username !== user?.username) return item.added_by_username
+    return ''
+  }
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <span style={{ fontSize: 28 }}>🛒</span>
-    </div>
+    <div className="screen"><div className="screen-body" style={{ paddingTop: 40, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="skeleton" style={{ height: 15, width: 90 }} />
+      <div className="skeleton" style={{ height: 34, width: '60%' }} />
+      <div className="skeleton" style={{ height: 46, width: '100%' }} />
+      <div className="skeleton" style={{ height: 46, width: '100%' }} />
+      <div className="skeleton" style={{ height: 46, width: '100%' }} />
+    </div></div>
   )
 
   return (
-    <div style={{ background: '#F5F8F8', minHeight: '100vh' }}>
-      <div className="page-header" style={{ background: 'linear-gradient(160deg, #232E2E 0%, #3A4A4A 100%)' }}>
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Weekly Shop</p>
-          <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Order List</h1>
-          <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 2 }}>
-            {pending.length} to order{maybe.length > 0 ? ` · ${maybe.length} not immediate` : ''}
-          </p>
-        </div>
-        {pending.length > 0 && (
-          <button onClick={markAllOrdered} disabled={markingAll} style={{
-            position: 'absolute', top: 48, right: 20, zIndex: 2,
-            background: 'rgba(255,255,255,0.15)', border: 'none',
-            color: 'rgba(255,255,255,0.9)', padding: '6px 12px',
-            borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer'
-          }}>✓ All done</button>
-        )}
-      </div>
+    <div className="screen">
 
-      <div className="page-body" data-tour="order-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-        {/* ── Add item + frequent chips ── */}
-        <div className="card" style={{ padding: 14 }}>
-          {/* Frequent items chips */}
-          {visibleFrequent.length > 0 && (
-            <div style={{ marginBottom: 10 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.6, color: 'var(--text-muted)', marginBottom: 7 }}>Frequently ordered</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {visibleFrequent.map(name => (
-                  <button key={name} onClick={() => addFrequent(name)} style={{
-                    padding: '5px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-                    border: '1px solid var(--green-light)', background: 'var(--green-pale)',
-                    color: 'var(--green-deep)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5
-                  }}>
-                    + {name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={addItem} style={{ display: 'flex', gap: 8 }}>
-            <input ref={inputRef} value={newItem} onChange={e => setNewItem(e.target.value)}
-              placeholder="Add item to order..."
-              style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit', background: 'white' }} />
-            <button type="submit" disabled={adding || !newItem.trim()} style={{
-              padding: '10px 16px', borderRadius: 12, border: 'none',
-              background: 'var(--green-mid)', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer'
-            }}>Add</button>
-          </form>
-
-          {/* QC links */}
-          {qcApps.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-              {qcApps.map((app: any) => (
-                <a key={app.url} href={app.url} target="_blank" rel="noopener noreferrer" style={{
-                  display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 99,
-                  border: '1px solid var(--border)', background: 'white', textDecoration: 'none',
-                  fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
-                }}>{app.emoji} {app.name}</a>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── TO ORDER ── */}
-        <div className="card">
-          <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-secondary)' }}>To Order (Immediate)</span>
-              {pending.length > 0 && (
-                <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--amber-light)', color: 'var(--amber)' }}>{pending.length}</span>
-              )}
-            </div>
-          </div>
-          {pending.length === 0 ? (
-            <p style={{ padding: '16px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>Nothing to order right now</p>
-          ) : (
-            pending.map(item => (
-              <OrderRow key={item.id} item={item as any} onSetStatus={setStatus} onDelete={deleteItem} />
-            ))
-          )}
-        </div>
-
-        {/* ── MAYBE ── */}
-        <div className="card">
-          <button onClick={() => setShowMaybe(p => !p)} style={{
-            width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: showMaybe && maybe.length > 0 ? '1px solid var(--border)' : 'none'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)' }}>Not Immediate</span>
-              {maybe.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--cream)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>{maybe.length}</span>}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Can wait</span>
-              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{showMaybe ? '▲' : '▼'}</span>
-            </div>
-          </button>
-          {showMaybe && (
-            maybe.length === 0
-              ? <p style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Move items here when you don't need them right away.</p>
-              : maybe.map(item => <OrderRow key={item.id} item={item as any} onSetStatus={setStatus} onDelete={deleteItem} isMaybe />)
-          )}
-        </div>
-
-        {/* ── SMART SUGGESTIONS (collapsible) ── */}
-        <div className="card">
-          <button onClick={() => setShowSuggestions(p => !p)} style={{
-            width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: showSuggestions ? '1px solid var(--border)' : 'none'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--green-mid)' }}>✨ Smart Suggestions</span>
-              {!suggestionsLoading && suggestions.filter(s => !addedSuggestions.has(s.item)).length > 0 && (
-                <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--green-light)', color: 'var(--green-deep)' }}>
-                  {suggestions.filter(s => !addedSuggestions.has(s.item)).length}
-                </span>
-              )}
-            </div>
-            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{showSuggestions ? '▲' : '▼'}</span>
-          </button>
-          {showSuggestions && (
-            <div>
-              {suggestionsLoading ? (
-                [1,2,3].map(i => (
-                  <div key={i} style={{ padding: '10px 16px', display: 'flex', gap: 10, borderBottom: '1px solid var(--border)' }}>
-                    <div className="skeleton" style={{ flex: 1, height: 14, borderRadius: 6 }} />
-                    <div className="skeleton" style={{ width: 60, height: 28, borderRadius: 8 }} />
-                  </div>
-                ))
-              ) : suggestions.filter(s => !addedSuggestions.has(s.item)).length === 0 ? (
-                <p style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>All suggestions already added.</p>
-              ) : (
-                suggestions.filter(s => !addedSuggestions.has(s.item)).map(s => (
-                  <div key={s.item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
-                    <div>
-                      <p style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>{s.item}</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>{s.reason}</p>
-                    </div>
-                    <button onClick={() => addSuggestion(s.item)} style={{
-                      padding: '6px 14px', borderRadius: 99, border: 'none',
-                      background: 'var(--green-light)', color: 'var(--green-deep)',
-                      fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0
-                    }}>+ Add</button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ── ORDERED ── */}
-        {ordered.length > 0 && (
-          <div className="card">
-            <button onClick={() => setShowOrdered(p => !p)} style={{
-              width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              borderBottom: showOrdered ? '1px solid var(--border)' : 'none'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.6, color: 'var(--text-muted)' }}>Ordered</span>
-                <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: '#D1FAE5', color: '#065F46' }}>{ordered.length}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button onClick={e => { e.stopPropagation(); clearOrdered() }} style={{
-                  padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)',
-                  background: 'white', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 600
-                }}>Clear</button>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{showOrdered ? '▲' : '▼'}</span>
-              </div>
-            </button>
-            {showOrdered && ordered.map(item => (
-              <OrderRow key={item.id} item={item as any} onSetStatus={setStatus} onDelete={deleteItem} isOrdered />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function OrderRow({ item, onSetStatus, onDelete, isMaybe = false, isOrdered = false }: {
-  item: any; onSetStatus: (id: string, s: Status) => void; onDelete: (id: string) => void
-  isMaybe?: boolean; isOrdered?: boolean
-}) {
-  const [showActions, setShowActions] = useState(false)
-  const src = SOURCE_LABEL[item.source] || ''
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', padding: '11px 16px',
-      borderBottom: '1px solid var(--border)', gap: 10,
-      background: isMaybe ? '#FAFAFA' : isOrdered ? '#F0FDF4' : 'white',
-      opacity: isOrdered ? 0.65 : 1, position: 'relative'
-    }}>
-      <button onClick={() => onSetStatus(item.id, isOrdered ? 'pending' : 'ordered')} style={{
-        width: 24, height: 24, borderRadius: '50%', flexShrink: 0, border: '2px solid',
-        borderColor: isOrdered ? 'var(--green-mid)' : isMaybe ? 'var(--border)' : 'var(--green-soft)',
-        background: isOrdered ? 'var(--green-mid)' : 'transparent',
-        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'white', fontSize: 13
-      }}>{isOrdered ? '✓' : ''}</button>
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 14, fontWeight: isOrdered ? 400 : 500, color: isOrdered ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: isOrdered ? 'line-through' : 'none' }}>
-          {src && <span style={{ marginRight: 4 }}>{src}</span>}{item.item_name}
+      <div className="screen-head">
+        <span className="label">Shared list</span>
+        <span style={{ display: 'flex', gap: 14 }}>
+          {qcApps.map((app: any) => (
+            <a key={app.url} href={app.url} target="_blank" rel="noopener noreferrer" className="label tap">{app.name}</a>
+          ))}
         </span>
       </div>
 
-      <div style={{ position: 'relative', flexShrink: 0 }}>
-        <button onClick={() => setShowActions(p => !p)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1 }}>⋯</button>
-        {showActions && (
-          <div onClick={() => setShowActions(false)} style={{
-            position: 'absolute', right: 0, top: 30, zIndex: 20,
-            background: 'white', borderRadius: 12, border: '1px solid var(--border)',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)', minWidth: 150, overflow: 'hidden'
-          }}>
-            {!isMaybe && !isOrdered && (
-              <button onClick={() => onSetStatus(item.id, 'maybe')} style={{ width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>
-                🕐 Not Immediate
-              </button>
-            )}
-            {isMaybe && (
-              <button onClick={() => onSetStatus(item.id, 'pending')} style={{ width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 500, color: 'var(--green-mid)', borderBottom: '1px solid var(--border)' }}>
-                ← Back to Immediate
-              </button>
-            )}
-            {isOrdered && (
-              <button onClick={() => onSetStatus(item.id, 'pending')} style={{ width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>
-                ↩ Move back
-              </button>
-            )}
-            <button onClick={() => onDelete(item.id)} style={{ width: '100%', padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 500, color: 'var(--red)' }}>
-              🗑️ Remove
+      <div className="screen-body" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+
+        <div style={{ paddingTop: 22 }}>
+          <p className="font-display" style={{ fontSize: 'var(--t-page)', lineHeight: 1.15, fontWeight: 600, margin: 0 }}>
+            {headline}
+          </p>
+          {lastByPartner && (
+            <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '8px 0 0' }}>
+              {(lastByPartner as any).added_by_username} added {lastByPartner.item_name.toLowerCase()}.
+            </p>
+          )}
+        </div>
+
+        {/* ── The list itself ─────────────────────────────────────── */}
+        <div style={{ paddingTop: 24 }}>
+          <div className="rule" />
+          {pending.map(item => (
+            <div key={item.id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', minHeight: 48 }}>
+                <button className="check tap" role="checkbox" aria-checked="false"
+                        aria-label={`Mark ${item.item_name} ordered`}
+                        onClick={() => setStatus(item.id, 'ordered')} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 16 }}>{item.item_name}</span>
+                {whyLine(item) && <span className="status">{whyLine(item)}</span>}
+                <button className="tap" aria-label="More" onClick={() => setActionItem(item)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>⋯</button>
+              </div>
+              <div className="rule" />
+            </div>
+          ))}
+
+          {pending.length === 0 && (
+            <>
+              <p className="tail" style={{ padding: '16px 0' }}>The list is clear.</p>
+              <div className="rule" />
+            </>
+          )}
+
+          {/* Add line — a ruled field, not a card. */}
+          <form onSubmit={addItem} style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 14 }}>
+            <span style={{ fontSize: 20, color: 'var(--ochre)', lineHeight: 1 }}>+</span>
+            <input ref={inputRef} className="field" value={newItem} onChange={e => setNewItem(e.target.value)}
+                   placeholder="Add an item" disabled={adding} />
+          </form>
+
+          {/* Suggestions and frequents live under the add line, where they
+              answer the question you just started asking. */}
+          {(visibleFrequent.length > 0 || openSuggestions.length > 0) && (
+            <p className="tail" style={{ paddingTop: 12, fontSize: 14 }}>
+              {openSuggestions.length > 0 && (
+                <>
+                  {suggestionsLoading ? null : 'Suggested — '}
+                  {openSuggestions.map((s, idx) => (
+                    <span key={s.item}>
+                      <button className="word word-ink tap" title={s.reason} onClick={() => addSuggestion(s.item)}
+                              style={{ fontSize: 14, letterSpacing: 0, textTransform: 'none', fontFamily: 'inherit' }}>
+                        {s.item}
+                      </button>{idx < openSuggestions.length - 1 ? ', ' : '. '}
+                    </span>
+                  ))}
+                </>
+              )}
+              {visibleFrequent.length > 0 && (
+                <>
+                  Usually —{' '}
+                  {visibleFrequent.map((name, idx) => (
+                    <span key={name}>
+                      <button className="word word-quiet tap" onClick={() => addNamed(name)}
+                              style={{ fontSize: 14, letterSpacing: 0, textTransform: 'none', fontFamily: 'inherit', color: 'var(--ink-soft)' }}>
+                        {name}
+                      </button>{idx < visibleFrequent.length - 1 ? ', ' : '.'}
+                    </span>
+                  ))}
+                </>
+              )}
+            </p>
+          )}
+        </div>
+
+        {/* ── The tail: things you are not acting on right now ────── */}
+        {(maybe.length > 0 || ordered.length > 0) && (
+          <div style={{ paddingTop: 26 }}>
+            <p className="label" style={{ margin: '0 0 8px' }}>Not urgent</p>
+            <p className="tail">
+              {maybe.length > 0 && <>{maybe.length} can wait — {joinNames(maybe.slice(0, 4).map(i => i.item_name.toLowerCase()))}{maybe.length > 4 ? `, +${maybe.length - 4}` : ''}. </>}
+              {ordered.length > 0 && <>{ordered.length} already ordered. </>}
+              {ordered.length > 0 && (
+                <button className="word word-quiet tap" onClick={clearOrdered}
+                        style={{ fontSize: 15, letterSpacing: 0, textTransform: 'none', fontFamily: 'inherit' }}>
+                  Clear those
+                </button>
+              )}
+            </p>
+          </div>
+        )}
+
+        <div style={{ flex: 1, minHeight: 24 }} />
+
+        {pending.length > 0 && (
+          <div style={{ paddingTop: 18 }}>
+            <button className="action" onClick={markAllOrdered} disabled={markingAll}>
+              {markingAll ? 'Marking…' : `Mark all ${pending.length} ordered`}
             </button>
           </div>
         )}
       </div>
+
+      {/* ── Row action sheet ───────────────────────────────────────── */}
+      {actionItem && (
+        <div className="sheet-scrim" onClick={() => setActionItem(null)}>
+          <div className="sheet" onClick={e => e.stopPropagation()}>
+            <p className="sheet-title">{actionItem.item_name}</p>
+            {whyLine(actionItem) && <p className="sheet-sub">{whyLine(actionItem)}</p>}
+
+            <div style={{ paddingTop: 20 }}>
+              <div className="rule" />
+              {(actionItem.status === 'maybe' || actionItem.status === 'ordered') ? (
+                <>
+                  <button className="row" onClick={() => setStatus(actionItem.id, 'pending')}>
+                    <span style={{ flex: 1 }}><p className="row-title" style={{ fontSize: 18 }}>Back to the list</p></span>
+                  </button>
+                  <div className="rule" />
+                </>
+              ) : (
+                <>
+                  <button className="row" onClick={() => setStatus(actionItem.id, 'maybe')}>
+                    <span style={{ flex: 1 }}>
+                      <p className="row-title" style={{ fontSize: 18 }}>It can wait</p>
+                      <p className="row-meta">Moves out of the count</p>
+                    </span>
+                  </button>
+                  <div className="rule" />
+                </>
+              )}
+            </div>
+
+            <button className="action-sm" style={{ width: '100%', marginTop: 18, borderColor: 'var(--rule)', color: 'var(--finished)' }}
+                    onClick={() => deleteItem(actionItem.id)}>
+              Remove from the list
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
