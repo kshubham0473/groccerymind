@@ -1,331 +1,196 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/components/AppProvider'
 import { useTour } from '@/components/TourProvider'
 import { PantryItem, OrderItem, DailyLock, HouseholdPreferences } from '@/types'
-import { cachedFetch } from '@/lib/page-cache'
-import Icon from '@/components/Icon'
-import Card from '@/components/Card'
+import { cachedFetch, cacheInvalidate } from '@/lib/page-cache'
+import DishImage from '@/components/DishImage'
 
 const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
+const todayKey = () => DAYS[new Date().getDay()]
+const todayISO = () => new Date().toISOString().split('T')[0]
 
-function getTodayKey() { return DAYS[new Date().getDay()] }
-function getTodayISO() { return new Date().toISOString().split('T')[0] }
+// Until the corpus carries real timings, complexity is the honest proxy.
+const MINUTES: Record<string, number> = { quick: 20, moderate: 45, elaborate: 90 }
+const minutesFor = (dish: any) => MINUTES[dish?.complexity] ?? 40
 
-// ── Mood nudge cache — 4 slots per day ───────────────────────────────
-function getTimeSlot(hour: number): string {
-  if (hour >= 6 && hour < 12) return 'morning'
-  if (hour >= 12 && hour < 15) return 'midday'
-  if (hour >= 15 && hour < 19) return 'afternoon'
-  return 'evening'
-}
-function nudgeCacheKey() {
-  const h = new Date().getHours()
-  return `gm_mood_${new Date().toDateString()}_${getTimeSlot(h)}`
-}
-function getMoodNudgeCache() {
-  try {
-    const raw = localStorage.getItem(nudgeCacheKey())
-    if (!raw) return null
-    const { data, dismissed } = JSON.parse(raw)
-    return { data, dismissed }
-  } catch { return null }
-}
-function setMoodNudgeCache(data: any, dismissed = false) {
-  try { localStorage.setItem(nudgeCacheKey(), JSON.stringify({ data, dismissed })) } catch {}
-}
+/** Which meal are we deciding? Before 3pm it's lunch, after that dinner. */
+const activeSlot = () => (new Date().getHours() < 15 ? 'lunch' : 'dinner')
 
-// ── Insights from behaviour_log ───────────────────────────────────────────────
-interface BehaviourEvent { event_type: string; metadata: any; created_at: string }
-interface Insight { emoji: string; headline: string; subline: string }
-
-function computeInsight(events: BehaviourEvent[]): Insight | null {
-  if (!events.length) return null
-  const now = Date.now()
-  const DAY = 86400000
-
-  const cooked   = events.filter(e => e.event_type === 'cooked')
-  const locked   = events.filter(e => e.event_type === 'meal_locked')
-  const discover = events.filter(e => e.event_type === 'discover_prompt')
-
-  const cookedDays = new Set(cooked.map(e => new Date(e.created_at).toDateString()))
-  let streak = 0
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(now - i * DAY).toDateString()
-    if (cookedDays.has(d)) streak++
-    else if (i > 0) break
-  }
-  if (streak >= 3) {
-    return { emoji: '🔥', headline: `${streak}-day streak`, subline: `Cooked every day for ${streak} days` }
-  }
-
-  const last30 = cooked.filter(e => now - new Date(e.created_at).getTime() < 30 * DAY)
-  const dishCount: Record<string, number> = {}
-  for (const e of last30) {
-    const name = e.metadata?.dish_name
-    if (name) dishCount[name] = (dishCount[name] || 0) + 1
-  }
-  const topDish = Object.entries(dishCount).sort((a, b) => b[1] - a[1])[0]
-  if (topDish && topDish[1] >= 3) {
-    return { emoji: '👨‍🍳', headline: `${topDish[0]} — ${topDish[1]}x this month`, subline: 'Your household favourite right now' }
-  }
-
-  const last7Days = new Set(Array.from({ length: 7 }, (_, i) => new Date(now - i * DAY).toDateString()))
-  const lockedThisWeek = new Set(
-    locked.filter(e => now - new Date(e.created_at).getTime() < 7 * DAY)
-          .map(e => `${e.metadata?.lock_date}_${e.metadata?.slot}`)
-  )
-  const cookedThisWeek = cooked.filter(e => last7Days.has(new Date(e.created_at).toDateString())).length
-  const lockedCount = lockedThisWeek.size
-  if (lockedCount >= 3 && cookedThisWeek >= 2) {
-    const pct = Math.round((cookedThisWeek / lockedCount) * 100)
-    return {
-      emoji: '📊',
-      headline: `${cookedThisWeek} of ${lockedCount} planned meals cooked`,
-      subline: pct >= 80 ? 'Solid week in the kitchen' : 'Room to cook more this week',
-    }
-  }
-
-  const discoverLast14 = discover.filter(e => now - new Date(e.created_at).getTime() < 14 * DAY)
-  if (discoverLast14.length >= 3) {
-    return { emoji: '✨', headline: `${discoverLast14.length} new dishes explored`, subline: 'In the last two weeks' }
-  }
-
-  const lunchCount  = cooked.filter(e => e.metadata?.slot === 'lunch').length
-  const dinnerCount = cooked.filter(e => e.metadata?.slot === 'dinner').length
-  if (lunchCount + dinnerCount >= 6) {
-    const more = lunchCount > dinnerCount ? 'lunch' : 'dinner'
-    const less = more === 'lunch' ? 'dinner' : 'lunch'
-    return {
-      emoji: more === 'lunch' ? '☀️' : '🌙',
-      headline: `You cook ${more} more than ${less}`,
-      subline: `${Math.max(lunchCount, dinnerCount)} ${more}s logged so far`,
-    }
-  }
-
-  if (cooked.length >= 2) {
-    return { emoji: '🍳', headline: `${cooked.length} meals cooked and logged`, subline: 'Insights get richer over time' }
-  }
-  return null
-}
-
-export default function Dashboard() {
+export default function Tonight() {
   const { user, household } = useApp()
   const router = useRouter()
-  const [lowItems, setLowItems] = useState<PantryItem[]>([])
-  const [todaySlots, setTodaySlots] = useState<any[]>([])
-  const [orders, setOrders] = useState<OrderItem[]>([])
-  const [todayLocks, setTodayLocks] = useState<DailyLock[]>([])
-  const [prefs, setPrefs] = useState<HouseholdPreferences>({})
-  const [cookedToday, setCookedToday] = useState<Record<string, string>>({})
-  const [insight, setInsight] = useState<Insight | null>(null)
-
   const { triggerIfNew } = useTour()
 
-  const [moodNudge, setMoodNudge] = useState<{ message: string; chips: string[] } | null>(null)
-  const [moodNudgeDismissed, setMoodNudgeDismissed] = useState(true)
-  const [moodNudgeLoading, setMoodNudgeLoading] = useState(false)
-  const [moodNudgeExpanded, setMoodNudgeExpanded] = useState(false)
+  const [slots, setSlots]       = useState<any[]>([])
+  const [locks, setLocks]       = useState<DailyLock[]>([])
+  const [pantry, setPantry]     = useState<PantryItem[]>([])
+  const [orders, setOrders]     = useState<OrderItem[]>([])
+  const [prefs, setPrefs]       = useState<HouseholdPreferences>({})
+  const [activity, setActivity] = useState<{ who: string; what: string } | null>(null)
+  const [loading, setLoading]   = useState(true)
 
-  const today = getTodayKey()
-  const hour = new Date().getHours()
+  const [pick, setPick]     = useState(0)      // index into today's options
+  const [cooked, setCooked] = useState(false)
 
-  const displayName = prefs.member_names?.[user?.username || ''] || user?.username || ''
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const slot = activeSlot()
+  const day = todayKey()
 
   useEffect(() => {
     fetch('/api/pantry/estimate', { method: 'POST' }).catch(() => {})
-    const locksUrl = `/api/locks?from=${getTodayISO()}&days=1`
-
     Promise.all([
-      cachedFetch('dashboard:pantry',    () => fetch('/api/pantry').then(r => r.json()),      (d) => { if (Array.isArray(d)) setLowItems(d.filter((i: any) => i.stock_status !== 'good' && i.depletion_source === 'auto')) }),
-      cachedFetch('dashboard:meal-plan', () => fetch('/api/meal-plan').then(r => r.json()),   (d) => { if (Array.isArray(d)) setTodaySlots(d.filter((s: any) => s.day === today)) }),
-      cachedFetch('dashboard:orders',    () => fetch('/api/orders').then(r => r.json()),      (d) => { if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked))) }),
-      cachedFetch('dashboard:locks',     () => fetch(locksUrl).then(r => r.json()),           (d) => { if (Array.isArray(d)) setTodayLocks(d) }),
-      cachedFetch('dashboard:prefs',     () => fetch('/api/preferences').then(r => r.json()), (d) => { if (!d?.error) setPrefs(d) }),
-      cachedFetch('dashboard:log',       () => fetch('/api/log/summary').then(r => r.json()), (d) => { if (Array.isArray(d)) setInsight(computeInsight(d)) }),
-    ])
-
+      cachedFetch('dashboard:meal-plan', () => fetch('/api/meal-plan').then(r => r.json()),                      (d) => { if (Array.isArray(d)) setSlots(d.filter((s: any) => s.day === day)) }),
+      cachedFetch('dashboard:locks',     () => fetch(`/api/locks?from=${todayISO()}&days=1`).then(r => r.json()),(d) => { if (Array.isArray(d)) setLocks(d) }),
+      cachedFetch('dashboard:pantry',    () => fetch('/api/pantry').then(r => r.json()),                         (d) => { if (Array.isArray(d)) setPantry(d) }),
+      cachedFetch('dashboard:orders',    () => fetch('/api/orders').then(r => r.json()),                         (d) => { if (Array.isArray(d)) setOrders(d.filter((o: any) => o.status === 'pending' || (!o.status && !o.is_checked))) }),
+      cachedFetch('dashboard:prefs',     () => fetch('/api/preferences').then(r => r.json()),                    (d) => { if (!d?.error) setPrefs(d) }),
+      // See README-PATCH: /api/log/summary should return the partner's last action.
+      cachedFetch('dashboard:log',       () => fetch('/api/log/summary').then(r => r.json()),                    (d) => { if (d && !Array.isArray(d) && d.partner_action) setActivity(d.partner_action) }),
+    ]).finally(() => setLoading(false))
     triggerIfNew()
+  }, [day])
 
-    const cached = getMoodNudgeCache()
-    if (cached) {
-      setMoodNudge(cached.data)
-      setMoodNudgeDismissed(cached.dismissed)
-    } else {
-      setMoodNudgeLoading(true)
-      setMoodNudgeDismissed(false)
-      fetch('/api/suggest/mood').then(r => r.json()).then(d => {
-        if (d.nudge) { setMoodNudge(d.nudge); setMoodNudgeCache(d.nudge, false) }
-        setMoodNudgeLoading(false)
-      }).catch(() => setMoodNudgeLoading(false))
-    }
-  }, [today])
+  const options = useMemo(() => slots.filter(s => s.slot === slot), [slots, slot])
+  const lock    = locks.find(l => l.slot === slot)
 
-  function dismissMoodNudge() {
-    setMoodNudgeDismissed(true)
-    if (moodNudge) setMoodNudgeCache(moodNudge, true)
-  }
+  const chosen    = lock ? null : options[pick % Math.max(options.length, 1)]
+  const chosenName = lock ? lock.dish_name : chosen?.dish?.name
+  const chosenDish = chosen?.dish
+  const alternates = options.filter((_, i) => i !== pick % Math.max(options.length, 1)).slice(0, 2)
 
-  function handleMoodChip(chip: string) {
-    dismissMoodNudge()
-    router.push(`/discover?prompt=${encodeURIComponent(chip)}`)
-  }
+  const lowItems = pantry.filter(i => i.stock_status !== 'good')
+  const memberName = (u?: string) => prefs.member_names?.[u || ''] || u || 'Someone'
 
-  async function logCooked(slot: string, dish: string) {
-    setCookedToday(p => ({ ...p, [slot]: dish }))
+  async function cook() {
+    if (!chosenName) return
+    setCooked(true)
+    cacheInvalidate('dashboard:log')
     await fetch('/api/log', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_type: 'cooked', metadata: { dish_name: dish, slot, day: today } })
+      body: JSON.stringify({ event_type: 'cooked', metadata: { dish_name: chosenName, slot, day } })
     })
+    // Locks the slot too, so the partner sees the same answer.
+    if (!lock) {
+      await fetch('/api/locks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lock_date: todayISO(), slot, dish_name: chosenName })
+      }).catch(() => {})
+    }
   }
-
-  async function addToOrder(name: string) {
-    const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_name: name, source: 'pantry' }) })
-    const d = await res.json()
-    if (!d.error) { setOrders(p => [...p, d]); setLowItems(p => p.filter(i => i.name !== name)) }
-  }
-
-  const lunch = todaySlots.filter(s => s.slot === 'lunch')
-  const dinner = todaySlots.filter(s => s.slot === 'dinner')
-  const lunchLock = todayLocks.find(l => l.slot === 'lunch')
-  const dinnerLock = todayLocks.find(l => l.slot === 'dinner')
 
   if (!user) return null
 
-  const SLOTS = [
-    { slot: 'lunch',  label: 'Lunch',  lock: lunchLock,  options: lunch  },
-    { slot: 'dinner', label: 'Dinner', lock: dinnerLock, options: dinner },
-  ]
-
   return (
-    <div style={{ background: 'var(--surface)', minHeight: '100vh' }}>
+    <div className="screen">
 
-      {/* ── Header — one ink, flex actions, safe-area aware ── */}
-      <div className="page-header" data-tour="header">
-        <div>
-          <p className="page-eyebrow">
-            {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-            {household?.name ? ` · ${household.name}` : ''}
-          </p>
-          <h1 className="page-title">{greeting},<br />{displayName}</h1>
-        </div>
-        <a href="/settings" className="header-btn" aria-label="Settings"><Icon name="settings" size={21} strokeWidth={1.6} /></a>
+      <div className="screen-head">
+        <span className="label">
+          {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+          {' · '}
+          {new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+        </span>
+        <a href="/settings" className="label tap">{household?.name || 'Settings'}</a>
       </div>
 
-      <div className="page-body">
+      <div className="screen-body" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
 
-        {/* ── PRIMARY: today's plan. The one hero on this screen. ── */}
-        <div data-tour="todays-decision" style={{
-          background: 'var(--green-deep)', borderRadius: 'var(--r-lg)',
-          padding: '14px var(--s4)', display: 'flex', flexDirection: 'column', gap: 'var(--s3)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--t-label)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.55)' }}>Today&apos;s plan</span>
-            <a href="/meal-plan" style={{ fontSize: 14, fontWeight: 600, color: 'var(--mint)' }}>Change</a>
+        {/* ── The pick ───────────────────────────────────────────── */}
+        {loading ? (
+          <div style={{ paddingTop: 22, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="skeleton" style={{ height: 15, width: 70 }} />
+            <div className="skeleton" style={{ height: 38, width: '75%' }} />
+            <div className="skeleton" style={{ height: 158, width: '100%' }} />
+            <div className="skeleton" style={{ height: 60, width: '100%' }} />
           </div>
-
-          {SLOTS.map(({ slot, label, lock, options }, i) => (
-            <div key={slot} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s3)' }}>
-              {i > 0 && <div style={{ height: 1, background: 'rgba(255,255,255,0.12)' }} />}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 'var(--t-label)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.5)', margin: 0 }}>
-                    {label}{!lock && options.length > 0 ? ` · ${options.length} options` : ''}
-                  </p>
-                  {lock ? (
-                    <p className="font-display" style={{ fontSize: 22, fontWeight: 600, color: '#fff', margin: '4px 0 0' }}>{lock.dish_name}</p>
-                  ) : options.length > 0 ? (
-                    <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0' }}>
-                      {options.slice(0, 2).map((s: any) => s.dish?.name).filter(Boolean).join(', ')}
-                      {options.length > 2 ? '…' : ''}
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', margin: '4px 0 0' }}>Nothing planned</p>
-                  )}
-                </div>
-
-                {lock
-                  ? cookedToday[slot] === lock.dish_name
-                    ? <span className="btn btn-sm" style={{ background: 'rgba(149,213,178,0.16)', color: 'var(--mint)', cursor: 'default' }}><Icon name="check" size={15} strokeWidth={2.4} />Cooked</span>
-                    : <button className="btn btn-on-dark" onClick={() => logCooked(slot, lock.dish_name)}><Icon name="check" size={16} strokeWidth={2.4} />Cooked</button>
-                  : <a href="/meal-plan" className="btn btn-on-dark">{options.length > 0 ? 'Choose' : 'Plan'}</a>
-                }
-              </div>
+        ) : chosenName ? (
+          <>
+            <div style={{ paddingTop: 22 }}>
+              <p className="font-display" style={{ fontSize: 15, fontStyle: 'italic', color: 'var(--ochre)', margin: 0 }}>
+                {cooked ? 'Cooked' : slot === 'lunch' ? 'Today' : 'Tonight'}
+              </p>
+              <p className="font-display" style={{ fontSize: 'var(--t-hero)', lineHeight: 1.1, fontWeight: 600, margin: '6px 0 0' }}>
+                {chosenName}
+              </p>
+              <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '8px 0 0' }}>
+                {chosenDish ? `${minutesFor(chosenDish)} min` : 'Locked in'}
+                {chosenDish?.cuisine_type ? ` · ${chosenDish.cuisine_type}` : ''}
+              </p>
             </div>
-          ))}
-        </div>
 
-        {/* ── Mood nudge — demoted from full gradient card to one quiet line ── */}
-        {(moodNudgeLoading || (!moodNudgeDismissed && moodNudge)) && (
-          moodNudgeLoading ? (
-            <div className="skeleton" style={{ height: 15, width: '70%', margin: '2px' }} />
-          ) : moodNudgeExpanded ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '2px' }}>
-              <p style={{ fontSize: 'var(--t-body)', color: 'var(--text-secondary)', margin: 0 }}>{moodNudge!.message}</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {moodNudge!.chips.map(chip => (
-                  <button key={chip} className="btn btn-sm btn-secondary" onClick={() => handleMoodChip(chip)}>{chip}</button>
-                ))}
-                <button className="btn btn-sm btn-ghost" onClick={() => { dismissMoodNudge(); router.push('/discover') }}>Explore all</button>
-              </div>
+            <div style={{ paddingTop: 18 }}>
+              <DishImage name={chosenName} youtubeUrl={chosenDish?.youtube_url} height={158} />
             </div>
-          ) : (
-            <button onClick={() => setMoodNudgeExpanded(true)} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '2px',
-              background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', minHeight: 44,
-            }}>
-              <Icon name="spark" size={16} style={{ color: 'var(--green-mid)' }} />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--t-body)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{moodNudge!.message}</span>
-              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--green-mid)', flexShrink: 0 }}>See ideas</span>
-            </button>
-          )
+
+            <div style={{ paddingTop: 18, display: 'flex', gap: 10 }}>
+              <button className="action" onClick={cook} disabled={cooked}>
+                {cooked ? 'Cooked ✓' : 'Cook this'}
+              </button>
+              {!lock && options.length > 1 && !cooked && (
+                <button className="action-ghost" onClick={() => setPick(p => p + 1)} aria-label="Suggest another">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 12a8 8 0 1 1-2.5-5.8" /><path d="M20 4v5h-5" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div style={{ paddingTop: 22 }}>
+            <p className="font-display" style={{ fontSize: 'var(--t-page)', lineHeight: 1.15, fontWeight: 600, margin: 0 }}>
+              Nothing planned for {slot}
+            </p>
+            <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '8px 0 18px' }}>Pick a few dishes and we&apos;ll choose between them.</p>
+            <button className="action" onClick={() => router.push('/meal-plan')}>Plan the week</button>
+          </div>
         )}
 
-        {/* ── Running out — above the order list: time-sensitive beats a list ── */}
-        {lowItems.length > 0 && (
-          <Card title="Running out" icon="alert" tone="warn" count={lowItems.length}>
-            {lowItems.map(item => (
-              <div key={item.id} className="card-row">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: item.stock_status === 'finished' ? 'var(--red)' : 'var(--amber)' }} />
-                  <span style={{ fontSize: 'var(--t-item)', fontWeight: 500 }}>{item.name}</span>
-                  <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{item.stock_status}</span>
-                </span>
-                <button className="btn btn-sm btn-secondary" onClick={() => addToOrder(item.name)}>Order</button>
+        {/* ── Alternates ─────────────────────────────────────────── */}
+        {!loading && alternates.length > 0 && !cooked && (
+          <div style={{ paddingTop: 26 }}>
+            <p className="label" style={{ margin: '0 0 14px' }}>Or instead</p>
+            <div className="rule" />
+            {alternates.map((o: any) => (
+              <div key={o.id}>
+                <button className="row" onClick={() => setPick(options.indexOf(o))}>
+                  <DishImage name={o.dish?.name} youtubeUrl={o.dish?.youtube_url} height={58} size="sm"
+                             style={{ width: 58, flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <p className="row-title">{o.dish?.name}</p>
+                    <p className="row-meta">{minutesFor(o.dish)} min{o.dish?.meal_pairing ? ` · ${o.dish.meal_pairing}` : ''}</p>
+                  </span>
+                </button>
+                <div className="rule" />
               </div>
             ))}
-          </Card>
+            <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '18px 0 0' }}>
+              Something else <a href="/discover" style={{ color: 'var(--ink)', fontWeight: 600, borderBottom: '1px solid var(--ink)', paddingBottom: 2 }}>Browse all</a>
+            </p>
+          </div>
         )}
 
-        {/* ── Order list ── */}
-        <Card title={`Order list${orders.length ? ` · ${orders.length}` : ''}`} icon="orders" action="View" onAction={() => router.push('/orders')}>
-          <div style={{ padding: 'var(--s3) var(--s4)' }}>
-            {orders.length === 0
-              ? <p style={{ fontSize: 'var(--t-body)', color: 'var(--text-muted)', margin: 0 }}>Nothing to order right now</p>
-              : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {orders.slice(0, 5).map(o => (
-                    <span key={o.id} style={{
-                      padding: '7px 11px', borderRadius: 'var(--r-full)', fontSize: 14, fontWeight: 500,
-                      background: 'var(--sunken)', border: '1px solid var(--border)'
-                    }}>{o.item_name}</span>
-                  ))}
-                  {orders.length > 5 && (
-                    <span style={{ padding: '7px 11px', fontSize: 14, color: 'var(--text-muted)' }}>+{orders.length - 5} more</span>
-                  )}
-                </div>
-              )}
-          </div>
-        </Card>
+        <div style={{ flex: 1, minHeight: 24 }} />
 
-        {/* ── Insight — the one place emoji still earns its keep ── */}
-        {insight && (
-          <div data-tour="insight-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 4px' }}>
-            <span style={{ fontSize: 22 }}>{insight.emoji}</span>
-            <p style={{ fontSize: 'var(--t-body)', color: 'var(--text-secondary)', margin: 0 }}>
-              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{insight.headline}</span> — {insight.subline}
+        {/* ── The rest of the app, as one sentence ───────────────── */}
+        {!loading && (lowItems.length > 0 || orders.length > 0 || activity) && (
+          <div style={{ paddingTop: 18 }}>
+            <div className="rule" style={{ marginBottom: 16 }} />
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', margin: 0, lineHeight: 1.65 }}>
+              {lowItems.length > 0 && (
+                <>
+                  <a href="/pantry" style={{ color: 'var(--ochre)', fontWeight: 600 }}>
+                    {lowItems.length} running low
+                  </a>
+                  {' — '}{lowItems.slice(0, 2).map(i => i.name.toLowerCase()).join(', ')}
+                  {lowItems.length > 2 ? `, +${lowItems.length - 2}` : ''}.<br />
+                </>
+              )}
+              {orders.length > 0 && (
+                <><a href="/orders" style={{ color: 'var(--ink)' }}>{orders.length} on the list</a>.{' '}</>
+              )}
+              {activity && (
+                <><span style={{ color: 'var(--ink)' }}>{memberName(activity.who)}</span> {activity.what}.</>
+              )}
             </p>
           </div>
         )}

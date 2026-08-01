@@ -1,60 +1,49 @@
 @import "tailwindcss";
 
-/* ── Type ───────────────────────────────────────────────────────────
-   Lora (display) + Inter (UI) only. Loaded via next/font in layout.tsx —
-   do NOT add @import url(fonts.googleapis…) here, and do not add a
-   second family in layout's <head>. */
+/* ── GroceryMind — editorial paper theme (direction 2a) ──────────────
+   Fonts load via next/font in layout.tsx: Lora (display), Inter (UI),
+   JetBrains Mono (labels + nav). No @import url() here, no second
+   family in layout's <head>. */
 
 :root {
-  /* Brand */
-  --green-deep:  #14372A;
-  --green-mid:   #2D6A4F;
-  --green-soft:  #52B788;
-  --green-light: #D8F3DC;
-  --green-pale:  #F0FAF2;
-  --mint:        #95D5B2;
+  /* Paper + ink */
+  --paper:     #FBFAF7;
+  --paper-alt: #F4F2EC;
+  --ink:       #1A1A18;
+  --ink-soft:  #6E6A5F;   /* 5.2:1 on paper — safe for real content */
+  --rule:      #E3E0D6;
+  --rule-firm: #D8D4C8;
 
-  --amber:       #B45309;   /* was #D97706 — now AA on white */
-  --amber-light: #FEF3C7;
-  --red:         #DC2626;
-  --red-light:   #FEE2E2;
+  /* Warmth — kadhai ochre. Used three times a screen, never as a field. */
+  --ochre:      #8A5B14;   /* 6.2:1 on paper */
+  --ochre-pale: #F1E8D6;
 
-  /* Surfaces — ONE app background. No per-page variants. */
-  --surface:  #FAFAF8;
-  --card:     #FFFFFF;
-  --sunken:   #F7F6F2;
-  --border:   #E7E5E0;
-  --hairline: #F0EEE9;
+  /* Status — only where genuinely status */
+  --low:      #8A5B14;
+  --finished: #A3281F;
+  --stocked:  #3F6B4A;
 
-  /* Text — all AA on --card */
-  --text-primary:   #111827;
-  --text-secondary: #4B5563;
-  --text-muted:     #6B7280;
-  --text-disabled:  #9CA3AF;   /* disabled + hairlines ONLY, never content */
+  /* Spacing */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
 
-  /* Spacing scale */
-  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  /* Radius — editorial: near-square. 3px reads as printed, not as UI. */
+  --r: 3px;
+  --r-full: 99px;
 
-  /* Radius scale */
-  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 99px;
-
-  /* Type scale — 5 steps, nothing below 12px */
-  --t-label: 12px;
+  /* Type — five steps, nothing under 12px */
+  --t-label: 12px;   /* mono, uppercase, tracked */
   --t-body:  15px;
-  --t-item:  17px;
-  --t-card:  20px;
-  --t-page:  28px;
-
-  --shadow:    0 1px 3px rgba(17,24,39,0.06), 0 1px 2px rgba(17,24,39,0.04);
-  --shadow-md: 0 4px 12px rgba(17,24,39,0.08);
+  --t-item:  20px;   /* Lora, list dish names */
+  --t-hero:  34px;   /* Lora, tonight's pick */
+  --t-page:  30px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 
 body {
-  background: var(--surface);
-  color: var(--text-primary);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: var(--t-body);
   line-height: 1.5;
@@ -63,182 +52,158 @@ body {
 }
 
 .font-display { font-family: var(--font-lora), Georgia, serif; }
+.font-mono    { font-family: var(--font-mono), ui-monospace, monospace; }
 
-a { color: var(--green-mid); text-decoration: none; }
-a:hover { color: var(--green-deep); }
+a { color: var(--ink); text-decoration: none; }
+a:hover { color: var(--ochre); }
 
-/* ── Card ────────────────────────────────────────────────────────── */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow);
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s2);
-  padding: 14px var(--s4);
-  border-bottom: 1px solid var(--hairline);
-}
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* ── Editorial primitives — rules, not cards ─────────────────────── */
+.rule { height: 1px; background: var(--rule); }
+
+.label {
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-size: var(--t-label);
-  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
 }
-.card-row {
+
+.row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  padding: var(--s3) var(--s4);
-  border-bottom: 1px solid var(--hairline);
-}
-.card-row:last-child { border-bottom: none; }
-
-/* ── Page header ─────────────────────────────────────────────────────
-   One ink for every page — the eyebrow label carries page identity.
-   Radius lives on the header itself: no ::after seam, no z-index patch. */
-.page-header {
-  background: var(--green-deep);
-  border-radius: 0 0 20px 20px;
-  padding: calc(20px + env(safe-area-inset-top, 0px)) 20px var(--s5);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s3);
-}
-.page-eyebrow {
-  color: rgba(255,255,255,0.55);
-  font-size: var(--t-label);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin: 0 0 var(--s2);
-}
-.page-title {
-  font-family: var(--font-lora), Georgia, serif;
-  color: #fff;
-  font-size: var(--t-page);
-  line-height: 1.15;
-  font-weight: 600;
-  margin: 0;
-}
-.page-sub { color: rgba(255,255,255,0.7); font-size: 14px; margin: 6px 0 0; }
-
-/* Header action — 44px target, no emoji */
-.header-btn {
-  width: 44px; height: 44px; flex-shrink: 0;
-  border-radius: var(--r-md);
+  gap: 14px;
+  padding: 13px 0;
+  min-height: 60px;
+  width: 100%;
+  background: none;
   border: none;
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.85);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.row-title { font-family: var(--font-lora), Georgia, serif; font-size: var(--t-item); font-weight: 600; color: var(--ink); margin: 0; }
+.row-meta  { font-size: 14px; color: var(--ink-soft); margin: 4px 0 0; }
+
+/* ── Actions — commitment is a 60px slab, not a pill ─────────────── */
+.action {
+  height: 60px;
+  border-radius: var(--r);
+  border: none;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer;
+  width: 100%;
+}
+.action:disabled { opacity: 0.4; cursor: default; }
+.action-ghost {
+  width: 60px; height: 60px; flex-shrink: 0;
+  border-radius: var(--r);
+  border: 1.5px solid var(--rule-firm);
+  background: none;
+  color: var(--ink-soft);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
-.header-btn:hover { background: rgba(255,255,255,0.18); }
-
-/* ── Buttons — 44px minimum on anything tappable ─────────────────── */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+.action-sm {
   min-height: 44px; padding: 0 18px;
-  border: none; border-radius: var(--r-full);
-  font-family: inherit; font-size: var(--t-body); font-weight: 700;
+  border-radius: var(--r); border: 1.5px solid var(--rule-firm);
+  background: none; color: var(--ink);
+  font: inherit; font-size: 15px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   cursor: pointer;
 }
-.btn-primary   { background: var(--green-deep); color: #fff; }
-.btn-on-dark   { background: var(--mint);       color: var(--green-deep); }
-.btn-secondary { background: var(--green-light); color: var(--green-deep); }
-.btn-ghost     { background: var(--card); color: var(--text-secondary); border: 1px solid var(--border); }
-.btn:disabled  { opacity: 0.5; cursor: default; }
-.btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: 14px; }
+.action-sm-solid { border-color: var(--ink); background: var(--ink); color: var(--paper); }
 
-/* Small visual, full hit area */
-.tap {
-  position: relative;
-  min-height: 36px;
-}
-.tap::after {
-  content: '';
-  position: absolute;
-  inset: -6px -4px;
-  min-height: 44px;
-}
+/* Small visual, 44px hit area */
+.tap { position: relative; min-height: 36px; }
+.tap::after { content: ''; position: absolute; inset: -6px -4px; min-height: 44px; }
 
-.pill {
-  display: inline-flex; align-items: center;
-  padding: 4px 10px;
-  border-radius: var(--r-full);
-  font-size: var(--t-label); font-weight: 600;
-  white-space: nowrap;
+/* ── Dish imagery ─────────────────────────────────────────────────── */
+.dish-img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  border-radius: var(--r);
+  background: var(--paper-alt);
 }
-.badge-good     { background: var(--green-light); color: var(--green-deep); }
-.badge-low      { background: var(--amber-light); color: var(--amber); }
-.badge-finished { background: var(--red-light);   color: var(--red); }
-
-/* ── Bottom nav — two signals only (fill weight + colour) ────────── */
-.bottom-nav {
-  background: rgba(255,255,255,0.97);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid var(--border);
+/* Typographic fallback when a thumbnail is missing or fails */
+.dish-fallback {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--paper-alt);
+  border-radius: var(--r);
+  font-family: var(--font-lora), Georgia, serif;
+  color: var(--ink-soft);
+  text-align: center;
+  padding: 8px;
+  line-height: 1.2;
 }
 
-/* ── Skeletons — the ONLY loading language. No emoji spinners. ───── */
-@keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
+/* ── Skeletons — the only loading language ───────────────────────── */
+@keyframes shimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
 .skeleton {
-  background: linear-gradient(90deg, #F0EFEB 25%, #F8F7F4 50%, #F0EFEB 75%);
+  background: linear-gradient(90deg, #F0EEE7 25%, #F8F7F3 50%, #F0EEE7 75%);
   background-size: 400px 100%;
   animation: shimmer 1.4s ease infinite;
-  border-radius: 6px;
+  border-radius: var(--r);
 }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.fade-up { animation: fadeUp 0.3s ease forwards; }
-.delay-1 { animation-delay: 0.05s; opacity: 0; }
-.delay-2 { animation-delay: 0.10s; opacity: 0; }
-.delay-3 { animation-delay: 0.15s; opacity: 0; }
-.delay-4 { animation-delay: 0.20s; opacity: 0; }
-
-::-webkit-scrollbar { width: 3px; height: 3px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--r-full); }
-
-.page-body {
-  padding: var(--s4);
-  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+/* ── Screen scaffold ─────────────────────────────────────────────── */
+.screen {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: var(--s3);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.screen-body {
+  padding: 0 var(--s5);
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+.screen-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 18px var(--s5) 0;
 }
 
-/* ── Desktop: the phone column sits in a frame, not on bare white ── */
-.app-shell {
-  max-width: 430px;
-  margin: 0 auto;
-  min-height: 100vh;
-  background: var(--surface);
-  position: relative;
+/* ── Nav — mono words, ochre underline. No icons, no pills. ──────── */
+.nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  padding-bottom: env(safe-area-inset-bottom);
 }
+.nav-inner {
+  display: flex; justify-content: space-between;
+  max-width: 430px; margin: 0 auto;
+  padding: var(--s4) var(--s5) 22px;
+}
+.nav-item {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: var(--t-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding-bottom: 3px;
+  min-height: 26px;
+}
+.nav-item[aria-current='page'] {
+  color: var(--ochre);
+  font-weight: 500;
+  border-bottom: 1.5px solid var(--ochre);
+}
+
+/* ── Desktop: framed, not a strip on white ───────────────────────── */
+.app-shell { max-width: 430px; margin: 0 auto; min-height: 100vh; background: var(--paper); position: relative; }
 @media (min-width: 900px) {
-  body { background: var(--green-deep); }
+  body { background: #262420; }
   .app-shell {
-    margin: 32px auto;
-    min-height: 0;
-    height: calc(100vh - 64px);
-    overflow-y: auto;
-    border-radius: 28px;
-    box-shadow: 0 30px 70px rgba(0,0,0,0.35);
+    margin: 32px auto; min-height: 0;
+    height: calc(100vh - 64px); overflow-y: auto;
+    border-radius: 20px;
+    box-shadow: 0 30px 70px rgba(0,0,0,0.4);
   }
-  .app-shell .bottom-nav { position: sticky; bottom: 0; }
+  .app-shell .nav { position: sticky; bottom: 0; }
 }
