@@ -1,100 +1,206 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* ── Type ───────────────────────────────────────────────────────────
+   Lora (display) + Inter (UI) only. Loaded via next/font in layout.tsx —
+   do NOT add @import url(fonts.googleapis…) here, and do not add a
+   second family in layout's <head>. */
+
 :root {
-  --green-deep: #1B4332;
-  --green-mid: #2D6A4F;
-  --green-soft: #52B788;
+  /* Brand */
+  --green-deep:  #14372A;
+  --green-mid:   #2D6A4F;
+  --green-soft:  #52B788;
   --green-light: #D8F3DC;
-  --green-pale: #F0FAF2;
-  --amber: #D97706;
+  --green-pale:  #F0FAF2;
+  --mint:        #95D5B2;
+
+  --amber:       #B45309;   /* was #D97706 — now AA on white */
   --amber-light: #FEF3C7;
-  --red: #DC2626;
-  --red-light: #FEE2E2;
-  --cream: #FAFAF8;
-  --white: #FFFFFF;
-  --text-primary: #111827;
-  --text-secondary: #6B7280;
-  --text-muted: #9CA3AF;
-  --border: #E5E7EB;
-  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05);
+  --red:         #DC2626;
+  --red-light:   #FEE2E2;
+
+  /* Surfaces — ONE app background. No per-page variants. */
+  --surface:  #FAFAF8;
+  --card:     #FFFFFF;
+  --sunken:   #F7F6F2;
+  --border:   #E7E5E0;
+  --hairline: #F0EEE9;
+
+  /* Text — all AA on --card */
+  --text-primary:   #111827;
+  --text-secondary: #4B5563;
+  --text-muted:     #6B7280;
+  --text-disabled:  #9CA3AF;   /* disabled + hairlines ONLY, never content */
+
+  /* Spacing scale */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+
+  /* Radius scale */
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 99px;
+
+  /* Type scale — 5 steps, nothing below 12px */
+  --t-label: 12px;
+  --t-body:  15px;
+  --t-item:  17px;
+  --t-card:  20px;
+  --t-page:  28px;
+
+  --shadow:    0 1px 3px rgba(17,24,39,0.06), 0 1px 2px rgba(17,24,39,0.04);
+  --shadow-md: 0 4px 12px rgba(17,24,39,0.08);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 
 body {
-  background: var(--cream);
+  background: var(--surface);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: var(--t-body);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
 }
 
-.font-display { font-family: 'Lora', Georgia, serif; }
+.font-display { font-family: var(--font-lora), Georgia, serif; }
 
-/* Cards */
+a { color: var(--green-mid); text-decoration: none; }
+a:hover { color: var(--green-deep); }
+
+/* ── Card ────────────────────────────────────────────────────────── */
 .card {
-  background: var(--white);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow);
 }
-
-/* Page header */
-.page-header {
-  background: linear-gradient(160deg, var(--green-deep) 0%, var(--green-mid) 100%);
-  padding: 48px 20px 32px;
-  position: relative;
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: 14px var(--s4);
+  border-bottom: 1px solid var(--hairline);
 }
-.page-header::after {
-  z-index: 0;
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--t-label);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--hairline);
+}
+.card-row:last-child { border-bottom: none; }
+
+/* ── Page header ─────────────────────────────────────────────────────
+   One ink for every page — the eyebrow label carries page identity.
+   Radius lives on the header itself: no ::after seam, no z-index patch. */
+.page-header {
+  background: var(--green-deep);
+  border-radius: 0 0 20px 20px;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 20px var(--s5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.page-eyebrow {
+  color: rgba(255,255,255,0.55);
+  font-size: var(--t-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0 0 var(--s2);
+}
+.page-title {
+  font-family: var(--font-lora), Georgia, serif;
+  color: #fff;
+  font-size: var(--t-page);
+  line-height: 1.15;
+  font-weight: 600;
+  margin: 0;
+}
+.page-sub { color: rgba(255,255,255,0.7); font-size: 14px; margin: 6px 0 0; }
+
+/* Header action — 44px target, no emoji */
+.header-btn {
+  width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: var(--r-md);
+  border: none;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.85);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.header-btn:hover { background: rgba(255,255,255,0.18); }
+
+/* ── Buttons — 44px minimum on anything tappable ─────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 44px; padding: 0 18px;
+  border: none; border-radius: var(--r-full);
+  font-family: inherit; font-size: var(--t-body); font-weight: 700;
+  cursor: pointer;
+}
+.btn-primary   { background: var(--green-deep); color: #fff; }
+.btn-on-dark   { background: var(--mint);       color: var(--green-deep); }
+.btn-secondary { background: var(--green-light); color: var(--green-deep); }
+.btn-ghost     { background: var(--card); color: var(--text-secondary); border: 1px solid var(--border); }
+.btn:disabled  { opacity: 0.5; cursor: default; }
+.btn-sm { min-height: 36px; padding: 0 var(--s4); font-size: 14px; }
+
+/* Small visual, full hit area */
+.tap {
+  position: relative;
+  min-height: 36px;
+}
+.tap::after {
   content: '';
   position: absolute;
-  bottom: -1px; left: 0; right: 0;
-  height: 20px;
-  background: var(--cream);
-  border-radius: 20px 20px 0 0;
+  inset: -6px -4px;
+  min-height: 44px;
 }
 
-/* Bottom nav */
+.pill {
+  display: inline-flex; align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  font-size: var(--t-label); font-weight: 600;
+  white-space: nowrap;
+}
+.badge-good     { background: var(--green-light); color: var(--green-deep); }
+.badge-low      { background: var(--amber-light); color: var(--amber); }
+.badge-finished { background: var(--red-light);   color: var(--red); }
+
+/* ── Bottom nav — two signals only (fill weight + colour) ────────── */
 .bottom-nav {
   background: rgba(255,255,255,0.97);
   backdrop-filter: blur(10px);
   border-top: 1px solid var(--border);
 }
 
-/* Pill */
-.pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 99px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-/* Status badges */
-.badge-good     { background: var(--green-light); color: var(--green-deep); }
-.badge-low      { background: var(--amber-light); color: var(--amber); }
-.badge-finished { background: var(--red-light);   color: var(--red); }
-
-/* Shimmer skeleton */
+/* ── Skeletons — the ONLY loading language. No emoji spinners. ───── */
 @keyframes shimmer {
   0%   { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #F0F0EE 25%, #F8F8F6 50%, #F0F0EE 75%);
+  background: linear-gradient(90deg, #F0EFEB 25%, #F8F7F4 50%, #F0EFEB 75%);
   background-size: 400px 100%;
   animation: shimmer 1.4s ease infinite;
   border-radius: 6px;
 }
 
-/* Animations */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -105,19 +211,34 @@ body {
 .delay-3 { animation-delay: 0.15s; opacity: 0; }
 .delay-4 { animation-delay: 0.20s; opacity: 0; }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--r-full); }
 
-.page-header-btn {
-  position: relative;
-  z-index: 2;
+.page-body {
+  padding: var(--s4);
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
 }
 
-/* ── Page body scroll container ─────────────────────────────────────
-   Ensures content is never hidden behind the bottom nav bar.
-   Use on every page's main scroll div. */
-.page-body {
-  padding: 16px 16px;
-  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+/* ── Desktop: the phone column sits in a frame, not on bare white ── */
+.app-shell {
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--surface);
+  position: relative;
+}
+@media (min-width: 900px) {
+  body { background: var(--green-deep); }
+  .app-shell {
+    margin: 32px auto;
+    min-height: 0;
+    height: calc(100vh - 64px);
+    overflow-y: auto;
+    border-radius: 28px;
+    box-shadow: 0 30px 70px rgba(0,0,0,0.35);
+  }
+  .app-shell .bottom-nav { position: sticky; bottom: 0; }
 }
