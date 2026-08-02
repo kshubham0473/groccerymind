@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useApp } from '@/components/AppProvider'
 import { useTour } from '@/components/TourProvider'
 import { useRouter } from 'next/navigation'
+import NotificationSettings from '@/components/NotificationSettings'
 
 const DIETARY_OPTIONS = ['No restrictions', 'Vegetarian', 'Vegan', 'Jain', 'Eggetarian']
 const CUISINE_OPTIONS = ['Maharashtrian', 'North Indian', 'South Indian', 'Punjabi', 'Gujarati', 'Bengali', 'Continental', 'Chinese', 'Italian']
@@ -249,6 +250,9 @@ export default function SettingsPage() {
             })}
           </div>
         </div>
+
+        {/* ── Daily nudge ── */}
+        <NotificationSettings isAdmin={user.role === 'admin'} />
 
         {/* ── Partner invite (all members) ── */}
         <div className="card" style={{ padding: 16 }}>
