@@ -13,7 +13,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg/960px-001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Taco"
     },
     {
       "_id": 2,
@@ -28,7 +31,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg/960px-001_Tacos_de_carnitas%2C_carne_asada_y_al_pastor.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Taco"
     },
     {
       "_id": 3,
@@ -88,7 +94,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Burrito.JPG/960px-Burrito.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Burrito"
     },
     {
       "_id": 7,
@@ -103,7 +112,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Burrito.JPG/960px-Burrito.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Burrito"
     },
     {
       "_id": 8,
@@ -118,7 +130,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Nachos-cheese.jpg/960px-Nachos-cheese.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Nachos"
     },
     {
       "_id": 9,
@@ -134,7 +149,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Guacamole_IMGP1271.jpg/960px-Guacamole_IMGP1271.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Guacamole"
     },
     {
       "_id": 10,
@@ -149,7 +167,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Shoyu_Ramen%EF%BC%88Tokyo_Ramen%EF%BC%89_-_01.jpg/960px-Shoyu_Ramen%EF%BC%88Tokyo_Ramen%EF%BC%89_-_01.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Ramen"
     },
     {
       "_id": 11,
@@ -165,7 +186,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Shoyu_Ramen%EF%BC%88Tokyo_Ramen%EF%BC%89_-_01.jpg/960px-Shoyu_Ramen%EF%BC%88Tokyo_Ramen%EF%BC%89_-_01.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Ramen"
     },
     {
       "_id": 12,
@@ -180,7 +204,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Nissanchickenrameninabowl-oct-2014.jpg/960px-Nissanchickenrameninabowl-oct-2014.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Nissin Chikin Ramen"
     },
     {
       "_id": 13,
@@ -196,7 +223,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Miso_Soup_001.jpg/960px-Miso_Soup_001.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Miso soup"
     },
     {
       "_id": 14,
@@ -212,7 +242,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/4/43/%E5%B0%8F%E6%96%99%E7%90%86%E3%83%90%E3%83%AB%E3%81%95%E3%81%8F%E3%82%89_%E7%89%B9%E8%A3%BD%E3%81%8A%E3%81%AB%E3%81%8E%E3%82%8A.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Onigiri"
     },
     {
       "_id": 15,
@@ -227,7 +260,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Sushi_platter.jpg/960px-Sushi_platter.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Sushi"
     },
     {
       "_id": 16,
@@ -243,7 +279,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Dolsot-bibimbap.jpg/960px-Dolsot-bibimbap.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Bibimbap"
     },
     {
       "_id": 17,
@@ -258,7 +297,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Dolsot-bibimbap.jpg/960px-Dolsot-bibimbap.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Bibimbap"
     },
     {
       "_id": 18,
@@ -273,7 +315,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Iksan_City_48_Korean_Style_Fried_chicken.jpg/960px-Iksan_City_48_Korean_Style_Fried_chicken.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Korean fried chicken"
     },
     {
       "_id": 19,
@@ -288,7 +333,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Koh_Mak%2C_Thailand%2C_Fried_rice_with_seafood%2C_Thai_fried_rice.jpg/960px-Koh_Mak%2C_Thailand%2C_Fried_rice_with_seafood%2C_Thai_fried_rice.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Fried rice"
     },
     {
       "_id": 20,
@@ -304,7 +352,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Tteokbokki.JPG/960px-Tteokbokki.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Tteokbokki"
     },
     {
       "_id": 21,
@@ -319,7 +370,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Phat_Thai_kung_Chang_Khien_street_stall.jpg/960px-Phat_Thai_kung_Chang_Khien_street_stall.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pad thai"
     },
     {
       "_id": 22,
@@ -334,7 +388,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Phat_Thai_kung_Chang_Khien_street_stall.jpg/960px-Phat_Thai_kung_Chang_Khien_street_stall.jpg",
+      "image_source": "corpus",
+      "image_attribution": "Wikimedia Commons — Pad thai"
     },
     {
       "_id": 23,
@@ -350,7 +407,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Tom_yam_kung_maenam.jpg/960px-Tom_yam_kung_maenam.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Tom yum"
     },
     {
       "_id": 24,
@@ -365,7 +425,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Champ_de_bl%C3%A9_C%C3%B4te-d%27Or_Bourgogne_avril_2014.jpg/960px-Champ_de_bl%C3%A9_C%C3%B4te-d%27Or_Bourgogne_avril_2014.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Green"
     },
     {
       "_id": 25,
@@ -380,7 +443,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Delicious_fresh_strawberries_%284735910403%29.jpg/960px-Delicious_fresh_strawberries_%284735910403%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Red"
     },
     {
       "_id": 26,
@@ -395,7 +461,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Champ_de_bl%C3%A9_C%C3%B4te-d%27Or_Bourgogne_avril_2014.jpg/960px-Champ_de_bl%C3%A9_C%C3%B4te-d%27Or_Bourgogne_avril_2014.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Green"
     },
     {
       "_id": 27,
@@ -409,7 +478,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Mango_sticy_rice_%283859549574%29.jpg/960px-Mango_sticy_rice_%283859549574%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Mango sticky rice"
     },
     {
       "_id": 28,
@@ -424,7 +496,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Aglio_e_olio.jpg/960px-Aglio_e_olio.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Spaghetti aglio e olio"
     },
     {
       "_id": 29,
@@ -439,7 +514,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Tagliatelle_al_rag%C3%B9_%28image_modified%29.jpg/960px-Tagliatelle_al_rag%C3%B9_%28image_modified%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Bolognese sauce"
     },
     {
       "_id": 30,
@@ -454,7 +532,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/%28Pasta%29_by_David_Adam_Kess_%28pic.2%29.jpg/960px-%28Pasta%29_by_David_Adam_Kess_%28pic.2%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pasta"
     },
     {
       "_id": 31,
@@ -469,7 +550,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Pasta_primavera.jpg/960px-Pasta_primavera.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pasta primavera"
     },
     {
       "_id": 32,
@@ -484,7 +568,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/PenneAllaVodka.jpg/960px-PenneAllaVodka.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Penne alla vodka"
     },
     {
       "_id": 33,
@@ -500,7 +587,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Risotto_with_speck_and_goat_cheese_%286101067436%29.jpg/960px-Risotto_with_speck_and_goat_cheese_%286101067436%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Risotto"
     },
     {
       "_id": 34,
@@ -515,7 +605,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Pizza-3007395.jpg/960px-Pizza-3007395.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pizza"
     },
     {
       "_id": 35,
@@ -532,7 +625,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Shakshuka_by_Calliopejen1.jpg/960px-Shakshuka_by_Calliopejen1.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Shakshouka"
     },
     {
       "_id": 36,
@@ -564,7 +660,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Lebanese_style_hummus.jpg/960px-Lebanese_style_hummus.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Hummus"
     },
     {
       "_id": 38,
@@ -580,7 +679,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Greece_Food_Horiatiki.JPG/960px-Greece_Food_Horiatiki.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Greek salad"
     },
     {
       "_id": 39,
@@ -595,7 +697,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Pizza-3007395.jpg/960px-Pizza-3007395.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pizza"
     },
     {
       "_id": 40,
@@ -611,7 +716,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/Tabouleh_1.JPG/960px-Tabouleh_1.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Tabbouleh"
     },
     {
       "_id": 41,
@@ -627,7 +735,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Avocado_toast_at_Voyager_Espresso_%2833134505776%29.jpg/960px-Avocado_toast_at_Voyager_Espresso_%2833134505776%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Avocado toast"
     },
     {
       "_id": 42,
@@ -643,7 +754,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/FrenchToast.JPG/960px-FrenchToast.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — French toast"
     },
     {
       "_id": 43,
@@ -658,7 +772,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Foodiesfeed.com_pouring-honey-on-pancakes-with-walnuts.jpg/960px-Foodiesfeed.com_pouring-honey-on-pancakes-with-walnuts.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pancake"
     },
     {
       "_id": 44,
@@ -674,7 +791,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Waffles_with_Strawberries.jpg/960px-Waffles_with_Strawberries.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Waffle"
     },
     {
       "_id": 45,
@@ -690,7 +810,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Scrambed_eggs.jpg/960px-Scrambed_eggs.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Scrambled eggs"
     },
     {
       "_id": 46,
@@ -722,7 +845,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Classic_Grilled_Cheese_Sandwich_%2825791331763%29_%28cropped%29.jpg/960px-Classic_Grilled_Cheese_Sandwich_%2825791331763%29_%28cropped%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Grilled cheese"
     },
     {
       "_id": 48,
@@ -737,7 +863,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Club_sandwich_at_Caf%C3%A9_Picnic.jpg/960px-Club_sandwich_at_Caf%C3%A9_Picnic.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Club sandwich"
     },
     {
       "_id": 49,
@@ -753,7 +882,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Caesar_salad_%282%29.jpg/960px-Caesar_salad_%282%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Caesar salad"
     },
     {
       "_id": 50,
@@ -769,7 +901,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Tomato_soup%2C_plant-based_%2844040252791%29.jpg/960px-Tomato_soup%2C_plant-based_%2844040252791%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Tomato soup"
     },
     {
       "_id": 51,
@@ -817,7 +952,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Original_Mac_n_Cheese_.jpg/960px-Original_Mac_n_Cheese_.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Macaroni and cheese"
     },
     {
       "_id": 54,
@@ -833,7 +971,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/BakedPotatoWithButter.jpg/960px-BakedPotatoWithButter.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Baked potato"
     },
     {
       "_id": 55,
@@ -880,7 +1021,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Gorgonzola_%2B_Bacon_Omelette_%40_Omelegg_%40_Amsterdam_%2816600947041%29.jpg/960px-Gorgonzola_%2B_Bacon_Omelette_%40_Omelegg_%40_Amsterdam_%2816600947041%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Omelette"
     },
     {
       "_id": 58,
@@ -896,7 +1040,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Spicy_egg_bhurji_%40_the_eggfactory.jpg/960px-Spicy_egg_bhurji_%40_the_eggfactory.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Egg bhurji"
     },
     {
       "_id": 59,
@@ -942,7 +1089,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Punjabi_style_Dal_Makhani.jpg/960px-Punjabi_style_Dal_Makhani.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Dal makhani"
     },
     {
       "_id": 62,
@@ -958,7 +1108,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/Makki_Di_Roti.JPG/960px-Makki_Di_Roti.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Makki ki roti"
     },
     {
       "_id": 63,
@@ -974,7 +1127,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Butter_Chicken_%26_Butter_Naan_-_Home_-_Chandigarh_-_India_-_0006.jpg/960px-Butter_Chicken_%26_Butter_Naan_-_Home_-_Chandigarh_-_India_-_0006.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Butter chicken"
     },
     {
       "_id": 64,
@@ -1005,7 +1161,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/8/84/Male_and_female_chicken_sitting_together.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Chicken"
     },
     {
       "_id": 66,
@@ -1021,7 +1180,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Bengali_Mutton_Curry.JPG/960px-Bengali_Mutton_Curry.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Mutton curry"
     },
     {
       "_id": 67,
@@ -1036,7 +1198,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Chicken_raw_egg_with_broken_shell.jpg/960px-Chicken_raw_egg_with_broken_shell.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — List of egg dishes"
     },
     {
       "_id": 68,
@@ -1051,7 +1216,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Balantiocheilos_melanopterus_-_Karlsruhe_Zoo_02_%28cropped%29.jpg/960px-Balantiocheilos_melanopterus_-_Karlsruhe_Zoo_02_%28cropped%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Fish"
     },
     {
       "_id": 69,
@@ -1067,7 +1235,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/Penaeus_monodon.jpg/960px-Penaeus_monodon.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Prawn"
     },
     {
       "_id": 70,
@@ -1083,7 +1254,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/%22Hyderabadi_Dum_Biryani%22.jpg/960px-%22Hyderabadi_Dum_Biryani%22.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Biryani"
     },
     {
       "_id": 71,
@@ -1114,7 +1288,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/d/dd/Afghan_Palo.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pilaf"
     },
     {
       "_id": 73,
@@ -1129,7 +1306,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/%22Hyderabadi_Dum_Biryani%22.jpg/960px-%22Hyderabadi_Dum_Biryani%22.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Biryani"
     },
     {
       "_id": 74,
@@ -1145,7 +1325,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Bambayya_Pav_bhaji.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Pav bhaji"
     },
     {
       "_id": 75,
@@ -1162,7 +1345,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Kolhapuri_Misal_Pav.jpg/960px-Kolhapuri_Misal_Pav.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Misal pav"
     },
     {
       "_id": 76,
@@ -1210,7 +1396,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Maharashtrian_Thalipith_-_1.jpg/960px-Maharashtrian_Thalipith_-_1.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Thalipeeth"
     },
     {
       "_id": 79,
@@ -1224,7 +1413,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/1/13/Puran_Poli.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Puran poli"
     },
     {
       "_id": 80,
@@ -1241,7 +1433,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/6/65/Dhokla_on_Gujrart.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Dhokla"
     },
     {
       "_id": 81,
@@ -1256,7 +1451,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Thepla_main.jpg/960px-Thepla_main.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Thepla"
     },
     {
       "_id": 82,
@@ -1271,7 +1469,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Undhiyu.jpg/960px-Undhiyu.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Undhiyu"
     },
     {
       "_id": 83,
@@ -1288,7 +1489,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/6/63/Dall_Khichdi.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Khichdi"
     },
     {
       "_id": 84,
@@ -1303,7 +1507,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f5/3_types_of_lentil.png/960px-3_types_of_lentil.png",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Dal"
     },
     {
       "_id": 85,
@@ -1319,7 +1526,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Mung_beans_%28Vigna_radiata%29.jpg/960px-Mung_beans_%28Vigna_radiata%29.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Mung bean"
     },
     {
       "_id": 86,
@@ -1335,7 +1545,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Chana_masala.jpg/960px-Chana_masala.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Chana masala"
     },
     {
       "_id": 87,
@@ -1365,7 +1578,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Palakpaneer_Rayagada_Odisha_0009.jpg/960px-Palakpaneer_Rayagada_Odisha_0009.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Palak paneer"
     },
     {
       "_id": 89,
@@ -1380,7 +1596,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Matar_paneer_dish.jpg/960px-Matar_paneer_dish.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Matar paneer"
     },
     {
       "_id": 90,
@@ -1412,7 +1631,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/7/7d/Kadai_Paneer-Delhi-12.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Kadai paneer"
     },
     {
       "_id": 92,
@@ -1445,7 +1667,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Indori_Poha%2C_New_Delhi.jpg/960px-Indori_Poha%2C_New_Delhi.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Indori poha"
     },
     {
       "_id": 94,
@@ -1461,7 +1686,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/A_photo_of_Upma.jpg/960px-A_photo_of_Upma.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Upma"
     },
     {
       "_id": 95,
@@ -1477,7 +1705,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/1/11/Idli_Sambar.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Idli"
     },
     {
       "_id": 96,
@@ -1493,7 +1724,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Masala_Dosa_2023.jpg/960px-Masala_Dosa_2023.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Masala dosa"
     },
     {
       "_id": 97,
@@ -1508,7 +1742,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Mini_Uttappam.jpg/960px-Mini_Uttappam.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Uttapam"
     },
     {
       "_id": 98,
@@ -1523,7 +1760,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Masala_Dosa_2023.jpg/960px-Masala_Dosa_2023.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Masala dosa"
     },
     {
       "_id": 99,
@@ -1540,7 +1780,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/Curd_Rice.jpg/960px-Curd_Rice.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Curd rice"
     },
     {
       "_id": 100,
@@ -1556,7 +1799,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/Chitranna_and_Payasa.jpg/960px-Chitranna_and_Payasa.jpg",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Chitranna"
     },
     {
       "_id": 101,
@@ -1572,7 +1818,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Pumpkin_sambar.JPG/960px-Pumpkin_sambar.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Sambar (dish)"
     },
     {
       "_id": 102,
@@ -1588,7 +1837,10 @@
       ],
       "youtube_url": "",
       "channel": "curated",
-      "source": "manual"
+      "source": "manual",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Rasam.JPG/960px-Rasam.JPG",
+      "image_source": "wikimedia",
+      "image_attribution": "Wikimedia Commons — Rasam (dish)"
     },
     {
       "_id": 103,

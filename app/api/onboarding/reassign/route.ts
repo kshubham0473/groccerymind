@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       is_vegetarian: replacement.is_vegetarian !== false,
       tags:          replacement.tags          || [],
       youtube_url:   replacement.youtube_url   || '',
+      image_url:     replacement.image_url     || '',
       ingredients:   [],
     }
   })

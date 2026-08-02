@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
+import { backfillDishImages } from '@/lib/dish-image-resolver'
 
 export async function GET(req: NextRequest) {
   const user = getSessionFromCookie(req.headers.get('cookie'))
@@ -32,6 +33,11 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (dishError) return NextResponse.json({ error: dishError.message }, { status: 500 })
+
+  // A user-typed dish has no YouTube video, so it would otherwise render as a
+  // bare monogram forever. Resolve a picture in the background — deliberately
+  // NOT awaited, so this never adds a millisecond to locking a meal.
+  backfillDishImages([dish])
 
   // Create meal slot
   const { data: slot_data, error: slotError } = await supabase

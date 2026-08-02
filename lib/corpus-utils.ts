@@ -15,6 +15,14 @@ export interface CorpusDish {
   tags:          string[]
   youtube_url:   string
   channel:       string
+  /**
+   * Resolved photograph, written by scripts/backfill-dish-images.js for corpus
+   * dishes that have no video. Distinct from youtube_url: this is only ever a
+   * picture, never something to surface as "watch recipe".
+   */
+  image_url?:    string
+  image_source?: string
+  image_attribution?: string
 }
 
 // ── Module-level cache ────────────────────────────────────────────────────────

@@ -28,7 +28,8 @@ export async function PATCH(req: NextRequest) {
 
   // Only allow safe fields to be updated
   const allowed = ['name', 'meal_pairing', 'youtube_url', 'ingredients',
-                   'complexity', 'tags', 'is_vegetarian', 'cuisine_type', 'description']
+                   'complexity', 'tags', 'is_vegetarian', 'cuisine_type', 'description',
+                   'image_url', 'image_source', 'image_attribution']
   const filtered = Object.fromEntries(
     Object.entries(updates).filter(([k]) => allowed.includes(k))
   )

@@ -225,6 +225,7 @@ Return ONLY a JSON array of exactly 3, no markdown:
           meal_pairing:  match.meal_pairing || '',
           cuisine_type:  match.cuisine_type || '',
           youtube_url:   match.youtube_url  || '',
+          image_url:     match.image_url    || '',
           is_vegetarian: match.is_vegetarian !== false,
           tags:          match.tags || [],
         }
@@ -241,7 +242,7 @@ Return ONLY a JSON array of exactly 3, no markdown:
       prepTime:   d.complexity === 'quick' ? '< 20 mins' : '25–35 mins',
       mood:       d.tags?.includes('quick') ? 'quick' : 'light',
       meal_pairing: d.meal_pairing || '', cuisine_type: d.cuisine_type || '',
-      youtube_url: d.youtube_url || '', is_vegetarian: d.is_vegetarian !== false, tags: d.tags || [],
+      youtube_url: d.youtube_url || '', image_url: d.image_url || '', is_vegetarian: d.is_vegetarian !== false, tags: d.tags || [],
     }))
     return NextResponse.json({ dishes: fallback })
   }

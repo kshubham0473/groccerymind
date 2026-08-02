@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import DishImage from '@/components/DishImage'
 
-type Dish = { name: string; description: string; usesFromPantry: string[]; needsToBuy: string[]; prepTime: string; mood: string; youtube_url?: string; meal_pairing?: string; error?: string }
+type Dish = { name: string; description: string; usesFromPantry: string[]; needsToBuy: string[]; prepTime: string; mood: string; youtube_url?: string; image_url?: string; meal_pairing?: string; error?: string }
 type Feedback = Record<string, 'like' | 'dislike'>
 
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
@@ -245,7 +245,7 @@ function DiscoverContent() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0' }}>
                   <button onClick={() => setSelected(dish.name)}
                           style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
-                    <DishImage name={dish.name} youtubeUrl={dish.youtube_url} height={64} size="sm" style={{ width: 64, flexShrink: 0 }} />
+                    <DishImage name={dish.name} youtubeUrl={dish.youtube_url} imageUrl={dish.image_url} height={64} size="sm" style={{ width: 64, flexShrink: 0 }} />
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <p className="row-title" style={isChosen ? { borderBottom: '1.5px solid var(--ink)', display: 'inline-block', paddingBottom: 2 } : undefined}>
                         {dish.name}

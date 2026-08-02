@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/auth'
 import { createServiceClient } from '@/lib/supabase'
 import { getStarterDishes, buildHouseholdContext } from '@/lib/gemini'
+import { backfillDishImages } from '@/lib/dish-image-resolver'
 
 export const maxDuration = 60
 
@@ -160,6 +161,10 @@ export async function POST(req: NextRequest) {
       is_vegetarian: d.is_vegetarian !== false,
       tags: d.tags || [],
       youtube_url: d.youtube_url || '',
+      // Corpus dishes backfilled by scripts/backfill-dish-images.js arrive with
+      // a picture already resolved — no lookup needed for those.
+      image_url: d.image_url || null,
+      image_source: d.image_url ? 'corpus-json' : null,
       ingredients: [],
     })))
     .select()
@@ -167,6 +172,10 @@ export async function POST(req: NextRequest) {
   if (dishError || !insertedDishes?.length) {
     return NextResponse.json({ error: dishError?.message || 'Failed to insert dishes' }, { status: 500 })
   }
+
+  // Fill pictures for any starter dish the corpus had no video for. Background
+  // only — onboarding must not wait on Wikipedia.
+  backfillDishImages(insertedDishes.filter(d => !d.youtube_url))
 
   const VALID_DAYS = new Set(['monday','tuesday','wednesday','thursday','friday','saturday','sunday'])
   const VALID_SLOTS = new Set(['lunch','dinner'])

@@ -51,7 +51,7 @@ function LockSheet({ slot, label, dayName, date, allSlots, onLock, onClose }: {
         : list.map((dish: any) => (
             <div key={dish.id}>
               <button className="row" onClick={() => onLock(dish.name, dish.id)}>
-                <DishImage name={dish.name} youtubeUrl={dish.youtube_url} height={46} size="sm" style={{ width: 46, flexShrink: 0 }} />
+                <DishImage name={dish.name} youtubeUrl={dish.youtube_url} imageUrl={dish.image_url} height={46} size="sm" style={{ width: 46, flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <p className="row-title">{dish.name}</p>
                   {dish.meal_pairing && <p className="row-meta">{dish.meal_pairing}</p>}
@@ -370,7 +370,7 @@ export default function MealPlanPage() {
                     )}
                   </span>
                   {head?.dish
-                    ? <DishImage name={head.name} youtubeUrl={head.dish?.youtube_url} height={46} size="sm" style={{ width: 46, flexShrink: 0 }} />
+                    ? <DishImage name={head.name} youtubeUrl={head.dish?.youtube_url} imageUrl={head.dish?.image_url} height={46} size="sm" style={{ width: 46, flexShrink: 0 }} />
                     : head
                       ? <DishImage name={head.name} height={46} size="sm" style={{ width: 46, flexShrink: 0 }} />
                       : <span className="word">Add</span>}

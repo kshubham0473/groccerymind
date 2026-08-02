@@ -119,7 +119,7 @@ export default function Tonight() {
             </div>
 
             <div style={{ paddingTop: 18 }}>
-              <DishImage name={chosenName} youtubeUrl={chosenDish?.youtube_url} height={158} />
+              <DishImage name={chosenName} youtubeUrl={chosenDish?.youtube_url} imageUrl={chosenDish?.image_url} height={158} />
             </div>
 
             <div style={{ paddingTop: 18, display: 'flex', gap: 10 }}>
@@ -153,7 +153,7 @@ export default function Tonight() {
             {alternates.map((o: any) => (
               <div key={o.id}>
                 <button className="row" onClick={() => setPick(options.indexOf(o))}>
-                  <DishImage name={o.dish?.name} youtubeUrl={o.dish?.youtube_url} height={58} size="sm"
+                  <DishImage name={o.dish?.name} youtubeUrl={o.dish?.youtube_url} imageUrl={o.dish?.image_url} height={58} size="sm"
                              style={{ width: 58, flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <p className="row-title">{o.dish?.name}</p>

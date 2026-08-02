@@ -36,3 +36,32 @@ export function dishImage(url?: string | null, size: ThumbSize = 'lg'): string |
   if (!id) return null
   return `https://i.ytimg.com/vi/${id}/${size === 'sm' ? 'mqdefault' : 'hqdefault'}.jpg`
 }
+
+/**
+ * The one place that decides what picture a dish shows.
+ *
+ * `image_url` is a resolved photograph (Wikimedia, a searched YouTube video, or
+ * a borrowed corpus thumbnail) and always wins — it is the more deliberate
+ * answer. `youtube_url` remains the fallback so the ~950 corpus dishes that
+ * already work keep working with no data migration.
+ *
+ * A stored ytimg URL is re-derived at the requested size, so small thumbnails
+ * don't download a 480×360 image for a 46px tile.
+ */
+export function dishPicture(
+  dish?: { image_url?: string | null; youtube_url?: string | null } | null,
+  size: ThumbSize = 'lg'
+): string | null {
+  if (!dish) return null
+
+  const stored = dish.image_url?.trim()
+  if (stored) {
+    const ytimg = stored.match(/^https:\/\/i\.ytimg\.com\/vi\/([A-Za-z0-9_-]{11})\//)
+    if (ytimg) {
+      return `https://i.ytimg.com/vi/${ytimg[1]}/${size === 'sm' ? 'mqdefault' : 'hqdefault'}.jpg`
+    }
+    return stored
+  }
+
+  return dishImage(dish.youtube_url, size)
+}

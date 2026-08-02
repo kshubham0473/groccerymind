@@ -313,6 +313,7 @@ Return ONLY a JSON object, no markdown:
     is_vegetarian: d.is_vegetarian !== false,
     tags:          d.tags          || [],
     youtube_url:   d.youtube_url   || '',
+    image_url:     d.image_url     || '',
     ingredients:   [],
     _category:     (d as any)._category || '',
   }))
