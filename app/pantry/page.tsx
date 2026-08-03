@@ -265,7 +265,7 @@ export default function PantryPage() {
               if (tierItems.length === 0) return null
               const { head, rest } = shelfLine(tierItems.map(i => ({ name: i.name, low: i.stock_status !== 'good' })))
               return (
-                <div key={tier.key} style={{ paddingTop: 26 }}>
+                <div key={tier.key} data-tour={tier.key === TIERS[0].key ? 'shelf' : undefined} style={{ paddingTop: 26 }}>
                   <p className="label" style={{ margin: '0 0 8px' }}>{tier.label} · {tierItems.length}</p>
                   <p className="tail">
                     {head.map((n, idx) => (

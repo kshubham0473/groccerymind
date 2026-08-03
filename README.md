@@ -1,78 +1,60 @@
-# GroceryMind — Setup Guide
+# GroceryMind redesign — drop-in update
 
-## Prerequisites
-- GitHub account, Vercel account, Supabase account, Node.js installed locally
+Everything from turns 1–4 of the design doc, merged into one folder that mirrors
+your repo. Later patches already win where they overlapped (`app/globals.css` and
+`components/DishImage.tsx` are the patch-3 versions).
 
----
+## Apply
 
-## Step 1 — Set up the database (Supabase)
-
-1. Open your Supabase project → **SQL Editor** → **New query**
-2. Open `supabase-schema.sql` from this project, copy all contents, paste and **Run**
-3. You should see "Success. No rows returned"
-
-Default login seeded: username `admin`, password `password` — **change immediately**
-
----
-
-## Step 2 — Get your Supabase keys
-
-Go to **Settings → API** in your Supabase project and copy:
-- Project URL
-- anon/public key  
-- service_role key (secret — never share)
-
----
-
-## Step 3 — Set up locally
+From your repo root:
 
 ```bash
-cd grocerymind
-npm install
-cp .env.local.example .env.local
-# Fill in .env.local with your keys
+cp -R /path/to/update/* .
 npm run dev
 ```
 
-Open http://localhost:3000 — login with `admin` / `password`
+That's it — 15 files, all replacements of existing ones. No new dependencies, no
+schema change, no new routes.
 
----
+## What lands where
 
-## Step 4 — Deploy to Vercel
+| File | From | What changed |
+| --- | --- | --- |
+| `app/globals.css` | turn 2a/3 | The editorial paper theme + every primitive (`.screen`, `.row`, `.rule`, `.field`, `.action`, `.word`, `.check`, `.label`, `.sheet`, `.skeleton`, `.tail`) |
+| `app/layout.tsx` | turn 2a | Lora + JetBrains Mono via `next/font` |
+| `app/dashboard/page.tsx` | turn 2a | Tonight — one decision, alternates as rows, the rest of the app as one sentence |
+| `app/meal-plan/page.tsx` | turn 3 | Week — seven ruled lines, expand a day in place |
+| `app/pantry/page.tsx` | turn 3 | Kitchen — attention rows first, the healthy remainder as prose |
+| `app/orders/page.tsx` | turn 3 | List — ruled checklist, inline add, quick-commerce links in the header |
+| `app/discover/page.tsx` | turn 3 | Behind "Browse all" — no longer a tab |
+| `app/login/page.tsx` | turn 4 | Title page: name in Lora, ruled inputs, join as a sentence |
+| `app/onboarding/page.tsx` | turn 4 | Six ruled segments, near-square chips, rotation as a checklist |
+| `app/admin/page.tsx` | turn 4 | Household as rows, invite code set large in mono |
+| `lib/tour-steps.ts` | turn 4 | 11 steps → 7, all selectors valid |
+| `components/TourOverlay.tsx` | turn 4 | Paper sheet, square spotlight, one mono step count |
+| `components/BottomNav.tsx` | turn 2a | Four mono words, no icons |
+| `components/DishImage.tsx`, `lib/dish-image.ts` | turn 2a/3 | Shared dish thumbnail with YouTube fallback |
 
-```bash
-git init && git add . && git commit -m "Initial GroceryMind"
-# Push to a new GitHub repo, then import in Vercel
-# Add all 5 env variables in Vercel settings before deploying
-```
+## Already done for you
 
----
+The seven `data-tour` anchors the new tour needs are **already in these files** —
+`tonight`, `commit`, `news` on dashboard; `week`, `browse` on meal-plan; `shelf`
+on pantry; `list` on orders. Nothing to add by hand.
 
-## Step 5 — First login steps
+One small content change came with the `browse` anchor: the meal-plan footer line
+now always renders (it used to appear only when nights were open), reading "The
+week is full. Browse all" in the full case.
 
-1. Login → Admin tab → create your real account
-2. Log out, log back in with new credentials  
-3. Create your partner's account from Admin
-4. Delete the default `admin` account
+## Untouched
 
----
+`components/TourProvider.tsx`, `components/AppProvider.tsx`, every `app/api/*`
+route, all DB tables, and all localStorage keys (`gm_tour_seen`, `gm_tour_step`,
+`gm_suggestion`).
 
-## Install as PWA
+Two deliberate behaviour cuts, both safe:
 
-**iPhone:** Safari → Share → Add to Home Screen  
-**Android:** Chrome → Menu → Add to Home Screen
-
----
-
-## What's in this build
-
-- Login/logout, two users, shared household
-- Dashboard with today's menu + pantry alerts  
-- 7-day meal plan with options per slot, add/remove dishes
-- Pantry with shelf view, mark Good/Low/Finished
-- Order list with real-time sync between both users
-- Admin panel to create household members
-- PWA-ready, installs on phone
-
-## Coming next
-- LLM ingredient parsing, smart order suggestions, dish discovery
+1. **Onboarding no longer assigns days per dish.** `POST /api/onboarding/starter`
+   still receives `selected: [{ ...dish, days: [] }]` — the endpoint is unchanged.
+   Days are assigned on Week now.
+2. **The tour is 7 steps.** Anyone mid-tour resumes at the same index; worst case
+   they land one step further along than they left off.

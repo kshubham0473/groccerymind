@@ -3,7 +3,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/components/AppProvider'
 
-const DIETARY_OPTIONS = ['No restrictions', 'Vegetarian', 'Vegan', 'Jain', 'Eggetarian']
+/* ── patch-4 · app/onboarding/page.tsx ─────────────────────────────────
+   Render-only rewrite onto the editorial paper theme (mocks 4b + 4c).
+   Every fetch, endpoint and payload key is unchanged. One behavioural
+   cut: per-dish day assignment is gone — `days` is still sent on each
+   selected dish, always [], so /api/onboarding/starter needs no change.
+   The Week screen (patch-3) is where days get assigned now. ─────────── */
+
+const DIETARY_OPTIONS = ['Vegetarian', 'Eggetarian', 'Jain', 'Vegan', 'No restrictions']
 const CUISINE_OPTIONS = ['Maharashtrian', 'North Indian', 'South Indian', 'Punjabi', 'Gujarati', 'Bengali', 'Continental', 'Chinese', 'Italian']
 const COMPLEXITY_OPTIONS = ['Simple & familiar', 'Some new things', 'Love experimenting']
 const COOKING_TIME_OPTIONS = ['Under 20 mins', '20–40 mins', 'No limit']
@@ -14,23 +21,15 @@ const TEXTURE_OPTIONS = ['No preference', 'Dry sabzi', 'Gravy dishes', 'Rice mea
 const HEALTH_OPTIONS  = ['No specific goals', 'High protein', 'Low oil', 'Gut-friendly', 'Weight loss', 'Kid-friendly']
 const OCCASION_OPTIONS = ['Weekday lunch', 'Weekday dinner', 'Weekend special', 'Guests / occasions', 'Meal prep / batch cook']
 const QC_OPTIONS = [
-  { key: 'blinkit',   name: 'Blinkit',           emoji: '🟡' },
-  { key: 'zepto',     name: 'Zepto',             emoji: '🟣' },
-  { key: 'swiggy',    name: 'Swiggy Instamart',  emoji: '🟠' },
-  { key: 'bigbasket', name: 'BigBasket',         emoji: '🟢' },
-]
-const DAY_SLOTS = [
-  { key: 'monday_lunch', label: 'Mon L' }, { key: 'monday_dinner', label: 'Mon D' },
-  { key: 'tuesday_lunch', label: 'Tue L' }, { key: 'tuesday_dinner', label: 'Tue D' },
-  { key: 'wednesday_lunch', label: 'Wed L' }, { key: 'wednesday_dinner', label: 'Wed D' },
-  { key: 'thursday_lunch', label: 'Thu L' }, { key: 'thursday_dinner', label: 'Thu D' },
-  { key: 'friday_lunch', label: 'Fri L' }, { key: 'friday_dinner', label: 'Fri D' },
-  { key: 'saturday_lunch', label: 'Sat L' }, { key: 'saturday_dinner', label: 'Sat D' },
-  { key: 'sunday_lunch', label: 'Sun L' }, { key: 'sunday_dinner', label: 'Sun D' },
+  { key: 'blinkit',   name: 'Blinkit' },
+  { key: 'zepto',     name: 'Zepto' },
+  { key: 'swiggy',    name: 'Swiggy Instamart' },
+  { key: 'bigbasket', name: 'BigBasket' },
 ]
 const TOTAL_STEPS = 6
 
-function PillSelect({ options, value, onChange, single = false }: {
+/* Near-square chips: hairline outline unselected, solid ink selected. */
+function Chips({ options, value, onChange, single = false }: {
   options: string[]; value: string | string[]; onChange: (v: any) => void; single?: boolean
 }) {
   const arr = single ? [] : (value as string[])
@@ -40,91 +39,30 @@ function PillSelect({ options, value, onChange, single = false }: {
       {options.map(opt => {
         const active = single ? sv === opt : arr.includes(opt)
         return (
-          <button key={opt} type="button" onClick={() => single ? onChange(opt) : onChange(active ? arr.filter((x: string) => x !== opt) : [...arr, opt])} style={{
-            padding: '8px 16px', borderRadius: 99, border: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: 600,
-            background: active ? 'var(--green-mid)' : 'white',
-            color: active ? 'white' : 'var(--text-secondary)',
-            boxShadow: active ? '0 2px 8px rgba(45,106,79,0.25)' : 'var(--shadow)'
-          }}>{opt}</button>
+          <button key={opt} type="button"
+            onClick={() => single ? onChange(opt) : onChange(active ? arr.filter((x: string) => x !== opt) : [...arr, opt])}
+            style={{
+              padding: '10px 15px', minHeight: 44,
+              borderRadius: 'var(--r)',
+              border: '1.5px solid',
+              borderColor: active ? 'var(--ink)' : 'var(--rule-firm)',
+              background: active ? 'var(--ink)' : 'none',
+              color: active ? 'var(--paper)' : 'var(--ink-soft)',
+              font: 'inherit', fontSize: 14, fontWeight: active ? 600 : 400,
+              cursor: 'pointer',
+            }}>{opt}</button>
         )
       })}
     </div>
   )
 }
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Group({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 22 }}>
-      <p style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: hint ? 4 : 10 }}>{title}</p>
-      {hint && <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.4 }}>{hint}</p>}
+    <div>
+      <p className="label" style={{ margin: hint ? '0 0 4px' : '0 0 12px' }}>{title}</p>
+      {hint && <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '0 0 12px', lineHeight: 1.5 }}>{hint}</p>}
       {children}
-    </div>
-  )
-}
-
-function DishCard({ dish, selected, onToggle, onDayToggle, pickedDays, onRegenerate, regenerating }: {
-  dish: any; selected: boolean; onToggle: () => void
-  onDayToggle: (daySlot: string) => void; pickedDays: string[]
-  onRegenerate: () => void; regenerating: boolean
-}) {
-  return (
-    <div style={{
-      borderRadius: 14, border: '2px solid', marginBottom: 10,
-      borderColor: selected ? 'var(--green-mid)' : 'var(--border)',
-      background: regenerating ? 'var(--cream)' : selected ? 'var(--green-pale)' : 'white',
-      overflow: 'hidden', transition: 'all 0.2s',
-      opacity: regenerating ? 0.5 : 1
-    }}>
-      <div style={{ padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button type="button" onClick={onToggle} disabled={regenerating} style={{
-          width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-          border: '2px solid', cursor: 'pointer',
-          borderColor: selected ? 'var(--green-mid)' : 'var(--border)',
-          background: selected ? 'var(--green-mid)' : 'transparent',
-          color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>{selected ? '✓' : ''}</button>
-
-        <div style={{ flex: 1, minWidth: 0 }} onClick={onToggle}>
-          <p className="font-display" style={{ fontSize: 14, fontWeight: 700, margin: 0, cursor: 'pointer',
-            color: selected ? 'var(--green-deep)' : 'var(--text-primary)' }}>
-            {regenerating ? '✨ Finding alternative...' : dish.name}
-          </p>
-          {!regenerating && (
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0', fontStyle: 'italic' }}>{dish.description}</p>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {!regenerating && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--cream)', padding: '2px 6px', borderRadius: 6 }}>{dish.cuisine_type}</span>
-          )}
-          <button type="button" onClick={e => { e.stopPropagation(); onRegenerate() }} disabled={regenerating} title="Get a different suggestion" style={{
-            width: 28, height: 28, borderRadius: 8, border: '1px solid var(--border)',
-            background: 'white', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-muted)', flexShrink: 0
-          }}>{regenerating ? '…' : '↻'}</button>
-        </div>
-      </div>
-
-      {selected && !regenerating && (
-        <div style={{ padding: '0 14px 12px', borderTop: '1px solid var(--green-light)' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-mid)', margin: '8px 0 6px' }}>
-            Schedule on specific days?
-            <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>(leave blank for auto-assign)</span>
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {DAY_SLOTS.map(ds => (
-              <button key={ds.key} type="button" onClick={() => onDayToggle(ds.key)} style={{
-                padding: '4px 8px', borderRadius: 6, border: '1px solid', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                borderColor: pickedDays.includes(ds.key) ? 'var(--green-mid)' : 'var(--border)',
-                background: pickedDays.includes(ds.key) ? 'var(--green-light)' : 'white',
-                color: pickedDays.includes(ds.key) ? 'var(--green-deep)' : 'var(--text-muted)'
-              }}>{ds.label}</button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -156,7 +94,6 @@ export default function OnboardingPage() {
   const [starterLoading, setStarterLoading] = useState(false)
   const [starterError, setStarterError] = useState('')
   const [selectedDishes, setSelectedDishes] = useState<Set<string>>(new Set())
-  const [dishDays, setDishDays] = useState<Record<string, string[]>>({})
   const [regeneratingDish, setRegeneratingDish] = useState<string | null>(null)
   const seenDishNames = useRef<Set<string>>(new Set())
 
@@ -189,9 +126,9 @@ export default function OnboardingPage() {
         setSelectedDishes(new Set(d.dishes.map((x: any) => x.name)))
         d.dishes.forEach((x: any) => seenDishNames.current.add(x.name))
       } else if (d.no_corpus) {
-        setStarterError('Recipe library not yet available. You can skip this step and add dishes manually from the Meals page.')
+        setStarterError('The recipe library isn\u2019t ready yet. Skip this — you can build the rotation from Week later.')
       } else {
-        setStarterError('Could not load suggestions. Try again or skip.')
+        setStarterError('Couldn\u2019t load suggestions. Try again, or skip.')
       }
       setStarterLoading(false)
     }).catch(() => { setStarterError('Network error — try again or skip.'); setStarterLoading(false) })
@@ -217,11 +154,6 @@ export default function OnboardingPage() {
         if (n.has(oldName)) { n.delete(oldName); n.add(d.dish.name) }
         return n
       })
-      setDishDays(p => {
-        const n = { ...p }
-        if (n[oldName]) { n[d.dish.name] = n[oldName]; delete n[oldName] }
-        return n
-      })
     }
     setRegeneratingDish(null)
   }
@@ -235,11 +167,9 @@ export default function OnboardingPage() {
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ member_names: memberNames }) })
     } else if (step === 3) {
-      // Step 3a: hard constraints only
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dietary, cuisine_prefs: cuisines, dislikes }) })
     } else if (step === 4) {
-      // Step 3b: soft preferences
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ meal_complexity: complexity, cooking_time: cookingTime,
           spice_level: spiceLevel, meal_variety: variety,
@@ -249,9 +179,10 @@ export default function OnboardingPage() {
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quickcommerce: qcApps }) })
     } else if (step === 6) {
+      // days stays in the payload, always empty — the Week screen assigns days now
       const selected = starterDishes
         .filter(d => selectedDishes.has(d.name))
-        .map(d => ({ ...d, days: dishDays[d.name] || [] }))
+        .map(d => ({ ...d, days: [] as string[] }))
       await fetch('/api/onboarding/starter', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selected }) })
       await fetch('/api/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -262,28 +193,22 @@ export default function OnboardingPage() {
   }
 
   function handleTextureChange(v: string[]) {
-    if (v.includes('No preference') && !texturePrefs.includes('No preference')) {
-      setTexturePrefs(['No preference'])
-    } else {
-      setTexturePrefs(v.filter(x => x !== 'No preference'))
-    }
+    if (v.includes('No preference') && !texturePrefs.includes('No preference')) setTexturePrefs(['No preference'])
+    else setTexturePrefs(v.filter(x => x !== 'No preference'))
   }
 
   function toggleDish(name: string) {
     setSelectedDishes(p => { const n = new Set(p); n.has(name) ? n.delete(name) : n.add(name); return n })
   }
-  function toggleDishDay(name: string, daySlot: string) {
-    setDishDays(p => { const cur = p[name] || []; return { ...p, [name]: cur.includes(daySlot) ? cur.filter(d => d !== daySlot) : [...cur, daySlot] } })
-  }
 
-  const progress = (step / TOTAL_STEPS) * 100
+  /* Titles say what the step is for, not what data it stores. */
   const STEP_META = [
-    { emoji: '🏠', title: "Your Kitchen's Name",    sub: 'Appears in your app header' },
-    { emoji: '👋', title: "Who's Cooking?",          sub: 'Display names for greetings' },
-    { emoji: '🍽️', title: 'Diet & Cuisine',          sub: 'Hard rules — GroceryMind always respects these' },
-    { emoji: '⚙️', title: 'Cooking Style',           sub: 'Soft preferences — shapes how suggestions feel' },
-    { emoji: '🛒', title: 'Where Do You Order?',     sub: 'Quick links on your order list' },
-    { emoji: '✨', title: 'Build Your Meal Plan',    sub: 'Personalised starter set — tap ↻ to swap any dish' },
+    { kicker: 'One of six',   title: 'What this kitchen is called', sub: 'It sits at the top of every screen. Changeable later.' },
+    { kicker: 'Two of six',   title: 'Who cooks here',              sub: 'First names, so the app can say who added what.' },
+    { kicker: 'Three of six', title: 'What you never eat',          sub: 'Hard rules. GroceryMind will never suggest against these — the softer stuff comes next.' },
+    { kicker: 'Four of six',  title: 'How you like to cook',        sub: 'Preferences, not rules. These tilt suggestions rather than block them.' },
+    { kicker: 'Five of six',  title: 'Where you order from',        sub: 'Your list gets a one-tap link to these.' },
+    { kicker: 'Last one',     title: 'Your rotation',               sub: 'Built from your answers. Drop the ones you\u2019d never cook — swap any single one with \u21bb.' },
   ]
   const meta = STEP_META[step - 1]
 
@@ -294,217 +219,189 @@ export default function OnboardingPage() {
   if (!user) return null
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', flexDirection: 'column', maxWidth: 430, margin: '0 auto' }}>
 
-      {/* Progress bar */}
-      <div style={{ height: 3, background: 'var(--border)', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20 }}>
-        <div style={{ height: '100%', background: 'var(--green-mid)', width: `${progress}%`, transition: 'width 0.4s ease' }} />
+      {/* Six ruled segments — where you are, not a filling bar */}
+      <div style={{ display: 'flex', gap: 5, padding: 'calc(20px + env(safe-area-inset-top, 0px)) 24px 0', flexShrink: 0 }}>
+        {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+          <div key={i} style={{
+            flex: 1, height: 2,
+            background: i < step - 1 ? 'var(--ink)' : i === step - 1 ? 'var(--ochre)' : 'var(--rule)',
+          }} />
+        ))}
       </div>
 
-      {/* Header */}
-      <div style={{ padding: '44px 24px 18px', textAlign: 'center' }}>
-        <div style={{ fontSize: 36, marginBottom: 10, lineHeight: 1 }}>{meta.emoji}</div>
-        <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--green-mid)', marginBottom: 5 }}>
-          Step {step} of {TOTAL_STEPS}
-        </p>
-        <h1 className="font-display" style={{ fontSize: 23, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 5px' }}>{meta.title}</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{meta.sub}</p>
+      <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+        <p className="label" style={{ color: 'var(--ochre)', margin: 0 }}>{meta.kicker}</p>
+        <h1 className="font-display" style={{ fontSize: 'var(--t-page)', lineHeight: 1.15, fontWeight: 600, margin: '10px 0 0' }}>{meta.title}</h1>
+        <p style={{ fontSize: 15, lineHeight: 1.55, color: 'var(--ink-soft)', margin: '8px 0 0' }}>{meta.sub}</p>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, padding: '4px 20px 160px' }}>
+      <div style={{ flex: 1, padding: '28px 24px 150px', display: 'flex', flexDirection: 'column', gap: 26 }}>
 
-        {/* Step 1 — Household name */}
         {step === 1 && (
           <div>
-            <input autoFocus value={householdName} onChange={e => setHouseholdName(e.target.value)}
+            <input autoFocus className="field" value={householdName}
+              onChange={e => setHouseholdName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && householdName.trim() && saveAndContinue()}
-              placeholder="e.g. The Sharma Home"
-              style={{ width: '100%', padding: '14px 16px', borderRadius: 14, border: '1.5px solid var(--border)', fontSize: 16, outline: 'none', fontFamily: 'inherit', background: 'white' }} />
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>Changeable anytime in Settings.</p>
+              placeholder="The Kapoor kitchen" style={{ fontSize: 20 }} />
           </div>
         )}
 
-        {/* Step 2 — Member names */}
         {step === 2 && (
-          <div>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Assign a first name so greetings feel personal.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {members.map(m => (
-              <div key={m.username} style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6 }}>@{m.username}</label>
-                <input value={memberNames[m.username] || ''} onChange={e => setMemberNames(p => ({ ...p, [m.username]: e.target.value }))}
-                  placeholder="First name"
-                  style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 15, outline: 'none', fontFamily: 'inherit', background: 'white' }} />
+              <div key={m.username}>
+                <label className="label" style={{ display: 'block', marginBottom: 6 }}>@{m.username}</label>
+                <input className="field" value={memberNames[m.username] || ''} placeholder="First name"
+                  onChange={e => setMemberNames(p => ({ ...p, [m.username]: e.target.value }))} />
               </div>
             ))}
           </div>
         )}
 
-        {/* Step 3a — Hard constraints: dietary, cuisines, dislikes */}
         {step === 3 && (
-          <div>
-            <Section title="Dietary preference">
-              <PillSelect options={DIETARY_OPTIONS} value={dietary} onChange={setDietary} single />
-            </Section>
-            <Section title="Cuisines you cook most">
-              <PillSelect options={CUISINE_OPTIONS} value={cuisines} onChange={setCuisines} />
-            </Section>
-            <Section title="Always avoid" hint="GroceryMind avoids these on every suggestion.">
-              <textarea value={dislikes} onChange={e => setDislikes(e.target.value)}
-                placeholder="e.g. No egg, avoid karela, don't like okra, too much garlic..."
-                rows={3} style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit', background: 'white', resize: 'none', lineHeight: 1.5 }} />
-            </Section>
-          </div>
+          <>
+            <Group title="Diet"><Chips options={DIETARY_OPTIONS} value={dietary} onChange={setDietary} single /></Group>
+            <Group title="Kitchens you cook from"><Chips options={CUISINE_OPTIONS} value={cuisines} onChange={setCuisines} /></Group>
+            <Group title="Always avoid">
+              <textarea value={dislikes} onChange={e => setDislikes(e.target.value)} rows={2}
+                placeholder="no karela, no okra, easy on garlic"
+                className="field" style={{ resize: 'none', lineHeight: 1.5 }} />
+              <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '10px 0 0' }}>
+                Plain words are fine — &ldquo;nothing too oily on weeknights&rdquo; works.
+              </p>
+            </Group>
+          </>
         )}
 
-        {/* Step 3b — Soft preferences: complexity, time, spice, health goals */}
         {step === 4 && (
-          <div>
-            <Section title="Proteins you use" hint="Select what your household regularly cooks with.">
-              <PillSelect options={PROTEIN_OPTIONS} value={proteinPrefs} onChange={setProteinPrefs} />
-            </Section>
-            <Section title="Preferred dish styles" hint="What kinds of dishes do you enjoy most?">
-              <PillSelect options={TEXTURE_OPTIONS} value={texturePrefs} onChange={handleTextureChange} />
-            </Section>
-            <Section title="Cooking complexity">
-              <PillSelect options={COMPLEXITY_OPTIONS} value={complexity} onChange={setComplexity} single />
-            </Section>
-            <Section title="Typical cooking time">
-              <PillSelect options={COOKING_TIME_OPTIONS} value={cookingTime} onChange={setCookingTime} single />
-            </Section>
-            <Section title="Spice level">
-              <PillSelect options={SPICE_OPTIONS} value={spiceLevel} onChange={setSpiceLevel} single />
-            </Section>
-            <Section title="Meal variety appetite">
-              <PillSelect options={VARIETY_OPTIONS} value={variety} onChange={setVariety} single />
-            </Section>
-            <Section title="Health goals">
-              <PillSelect options={HEALTH_OPTIONS} value={healthGoals} onChange={(v: string[]) => {
+          <>
+            <Group title="Proteins you cook with"><Chips options={PROTEIN_OPTIONS} value={proteinPrefs} onChange={setProteinPrefs} /></Group>
+            <Group title="Dishes you gravitate to"><Chips options={TEXTURE_OPTIONS} value={texturePrefs} onChange={handleTextureChange} /></Group>
+            <Group title="On a weeknight you want"><Chips options={COMPLEXITY_OPTIONS} value={complexity} onChange={setComplexity} single /></Group>
+            <Group title="Time at the stove"><Chips options={COOKING_TIME_OPTIONS} value={cookingTime} onChange={setCookingTime} single /></Group>
+            <Group title="Spice"><Chips options={SPICE_OPTIONS} value={spiceLevel} onChange={setSpiceLevel} single /></Group>
+            <Group title="Appetite for something new"><Chips options={VARIETY_OPTIONS} value={variety} onChange={setVariety} single /></Group>
+            <Group title="Anything you're working towards">
+              <Chips options={HEALTH_OPTIONS} value={healthGoals} onChange={(v: string[]) => {
                 if (v.includes('No specific goals') && !healthGoals.includes('No specific goals')) setHealthGoals(['No specific goals'])
                 else setHealthGoals(v.filter((x: string) => x !== 'No specific goals'))
               }} />
-            </Section>
-            <Section title="You typically cook for">
-              <PillSelect options={OCCASION_OPTIONS} value={occasions} onChange={setOccasions} />
-            </Section>
-          </div>
+            </Group>
+            <Group title="Meals you plan for"><Chips options={OCCASION_OPTIONS} value={occasions} onChange={setOccasions} /></Group>
+          </>
         )}
 
-        {/* Step 5 — Quick commerce */}
         {step === 5 && (
           <div>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Quick links appear on your order list for one-tap ordering.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {QC_OPTIONS.map(app => {
-                const active = qcApps.includes(app.key)
-                return (
-                  <button key={app.key} type="button" onClick={() => setQcApps(p => active ? p.filter(k => k !== app.key) : [...p, app.key])} style={{
-                    padding: '16px 18px', borderRadius: 14, border: '2px solid', cursor: 'pointer',
-                    borderColor: active ? 'var(--green-mid)' : 'var(--border)',
-                    background: active ? 'var(--green-pale)' : 'white',
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    boxShadow: active ? '0 2px 8px rgba(45,106,79,0.15)' : 'var(--shadow)'
-                  }}>
-                    <span style={{ fontSize: 24 }}>{app.emoji}</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: active ? 'var(--green-deep)' : 'var(--text-primary)' }}>{app.name}</span>
-                    {active && <span style={{ marginLeft: 'auto', color: 'var(--green-mid)', fontWeight: 700 }}>✓</span>}
+            <div className="rule" />
+            {QC_OPTIONS.map(app => {
+              const active = qcApps.includes(app.key)
+              return (
+                <div key={app.key}>
+                  <button type="button" className="row"
+                    onClick={() => setQcApps(p => active ? p.filter(k => k !== app.key) : [...p, app.key])}>
+                    <span className="check" aria-checked={active} role="checkbox">{active ? '✓' : ''}</span>
+                    <span className="row-title" style={{ flex: 1 }}>{app.name}</span>
                   </button>
-                )
-              })}
-            </div>
+                  <div className="rule" />
+                </div>
+              )
+            })}
           </div>
         )}
 
-        {/* Step 6 — Dish selection */}
         {step === 6 && (
           <div>
-            {/* Instruction card */}
-            <div style={{
-              padding: '12px 14px', borderRadius: 12, marginBottom: 16,
-              background: 'var(--green-pale)', border: '1px solid var(--green-light)'
-            }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--green-deep)', margin: '0 0 4px' }}>
-                These are your weekly options — not a shopping list.
-              </p>
-              <p style={{ fontSize: 12, color: 'var(--green-mid)', margin: 0, lineHeight: 1.5 }}>
-                Tap to deselect dishes you'd never cook. Tap ↻ to swap for something else.
-              </p>
-            </div>
-
             {starterLoading ? (
               <div>
-                <div style={{ textAlign: 'center', padding: '20px 0 16px' }}>
-                  <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-deep)' }}>✨ Building your personalised list...</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>GroceryMind is curating dishes from your preferences</p>
-                </div>
-                {[1,2,3,4,5].map(i => <div key={i} className="skeleton" style={{ height: 58, borderRadius: 14, marginBottom: 10 }} />)}
+                <p className="label" style={{ margin: '0 0 16px' }}>Curating from your answers…</p>
+                {[1,2,3,4,5,6].map(i => <div key={i} className="skeleton" style={{ height: 56, marginBottom: 10 }} />)}
               </div>
             ) : starterError ? (
-              <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>{starterError}</p>
-                <button onClick={fetchStarterDishes} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'var(--green-mid)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Try again</button>
+              <div>
+                <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '0 0 18px', lineHeight: 1.6 }}>{starterError}</p>
+                <button onClick={fetchStarterDishes} className="action-sm">Try again</button>
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
-                    <strong style={{ color: 'var(--green-deep)' }}>{selectedDishes.size}</strong> of {starterDishes.length} selected
-                  </p>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" onClick={() => setSelectedDishes(new Set(starterDishes.map(d => d.name)))} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'white', cursor: 'pointer', color: 'var(--green-mid)', fontWeight: 600 }}>All</button>
-                    <button type="button" onClick={() => setSelectedDishes(new Set())} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'white', cursor: 'pointer', color: 'var(--text-muted)', fontWeight: 600 }}>None</button>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <span className="label">{selectedDishes.size} of {starterDishes.length} keeping</span>
+                  <button type="button" className="word"
+                    onClick={() => setSelectedDishes(new Set(starterDishes.map(d => d.name)))}>Keep all</button>
                 </div>
-                {starterDishes.map(dish => (
-                  <DishCard key={dish.name} dish={dish}
-                    selected={selectedDishes.has(dish.name)}
-                    onToggle={() => toggleDish(dish.name)}
-                    pickedDays={dishDays[dish.name] || []}
-                    onDayToggle={ds => toggleDishDay(dish.name, ds)}
-                    onRegenerate={() => regenerateDish(dish.name)}
-                    regenerating={regeneratingDish === dish.name} />
-                ))}
+                <div className="rule" />
+                {starterDishes.map(dish => {
+                  const on = selectedDishes.has(dish.name)
+                  const busy = regeneratingDish === dish.name
+                  return (
+                    <div key={dish.name}>
+                      <div className="row" style={{ cursor: 'default' }}>
+                        {busy ? (
+                          <>
+                            <span className="check" style={{ background: 'var(--paper-alt)', borderColor: 'var(--rule)' }} />
+                            <p className="row-title" style={{ flex: 1, fontWeight: 500, fontStyle: 'italic', color: 'var(--ink-soft)' }}>Finding another…</p>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" className="check tap" role="checkbox" aria-checked={on}
+                              onClick={() => toggleDish(dish.name)}>{on ? '✓' : ''}</button>
+                            <button type="button" onClick={() => toggleDish(dish.name)}
+                              style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>
+                              <p className="row-title" style={{
+                                fontWeight: on ? 600 : 500,
+                                color: on ? 'var(--ink)' : 'var(--ink-soft)',
+                                textDecoration: on ? 'none' : 'line-through',
+                                textDecorationColor: 'var(--rule-firm)',
+                              }}>{dish.name}</p>
+                              <p className="row-meta">{on ? [dish.cuisine_type, dish.description].filter(Boolean).join(' · ') : 'Dropped'}</p>
+                            </button>
+                            <button type="button" onClick={() => regenerateDish(dish.name)} title="Swap this one"
+                              className="tap" style={{
+                                background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
+                                fontFamily: 'var(--font-mono), ui-monospace, monospace', fontSize: 15, color: 'var(--ink-soft)',
+                                width: 36, minHeight: 36,
+                              }}>↻</button>
+                          </>
+                        )}
+                      </div>
+                      <div className="rule" />
+                    </div>
+                  )
+                })}
+                <p className="tail" style={{ padding: '18px 0 0' }}>
+                  Nothing here is a shopping list. It&rsquo;s the pool tonight&rsquo;s suggestion draws from — editable forever from <em>Week → Edit menu</em>.
+                </p>
               </>
             )}
           </div>
         )}
       </div>
 
-      {/* Footer */}
+      {/* Footer — ink slab, ghost back */}
       <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        padding: '14px 20px',
-        paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 8px))',
-        background: 'rgba(250,250,248,0.98)', backdropFilter: 'blur(12px)',
-        borderTop: '1px solid var(--border)', zIndex: 10
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 10,
+        maxWidth: 430, margin: '0 auto',
+        background: 'var(--paper)', borderTop: '1px solid var(--rule)',
+        padding: '16px 24px calc(26px + env(safe-area-inset-bottom, 0px))',
       }}>
-        <div style={{ maxWidth: 430, margin: '0 auto' }}>
-          <button onClick={saveAndContinue}
-            disabled={isNextDisabled}
-            style={{
-              width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-              background: isNextDisabled ? 'var(--border)' : 'var(--green-mid)',
-              color: isNextDisabled ? 'var(--text-muted)' : 'white',
-              fontSize: 15, fontWeight: 700, cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(45,106,79,0.25)'
-            }}>
-            {saving ? 'Saving...'
-              : step === 6 ? (selectedDishes.size > 0 ? `Save ${selectedDishes.size} dishes & launch 🎉` : 'Skip & go to dashboard')
-              : 'Continue →'}
+        <div style={{ display: 'flex', gap: 10 }}>
+          {step > 1 && (
+            <button type="button" onClick={() => setStep(s => s - 1)} className="action-ghost" aria-label="Back">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+          )}
+          <button onClick={saveAndContinue} disabled={isNextDisabled} className="action" style={{ flex: 1 }}>
+            {saving ? 'Saving…' : step === 6 ? (selectedDishes.size > 0 ? 'Start cooking' : 'Skip for now') : 'Next'}
           </button>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 8 }}>
-            {step > 1 && (
-              <button type="button" onClick={() => setStep(s => s - 1)} style={{ padding: '8px 16px', border: 'none', background: 'none', fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>
-                ← Back
-              </button>
-            )}
-            {step < TOTAL_STEPS && step !== 1 && (
-              <button type="button" onClick={() => { setSaving(false); setStep(s => s + 1) }} style={{ padding: '8px 16px', border: 'none', background: 'none', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
-                Skip
-              </button>
-            )}
-          </div>
         </div>
+        {step > 1 && step < TOTAL_STEPS && (
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
+            <button type="button" onClick={() => { setSaving(false); setStep(s => s + 1) }}
+              className="word word-quiet" style={{ minHeight: 44 }}>Skip this</button>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -105,7 +105,7 @@ export default function Tonight() {
           </div>
         ) : chosenName ? (
           <>
-            <div style={{ paddingTop: 22 }}>
+            <div data-tour="tonight" style={{ paddingTop: 22 }}>
               <p className="font-display" style={{ fontSize: 15, fontStyle: 'italic', color: 'var(--ochre)', margin: 0 }}>
                 {cooked ? 'Cooked' : slot === 'lunch' ? 'Today' : 'Tonight'}
               </p>
@@ -119,10 +119,10 @@ export default function Tonight() {
             </div>
 
             <div style={{ paddingTop: 18 }}>
-              <DishImage name={chosenName} youtubeUrl={chosenDish?.youtube_url} imageUrl={chosenDish?.image_url} height={158} />
+              <DishImage name={chosenName} youtubeUrl={chosenDish?.youtube_url} height={158} />
             </div>
 
-            <div style={{ paddingTop: 18, display: 'flex', gap: 10 }}>
+            <div data-tour="commit" style={{ paddingTop: 18, display: 'flex', gap: 10 }}>
               <button className="action" onClick={cook} disabled={cooked}>
                 {cooked ? 'Cooked ✓' : 'Cook this'}
               </button>
@@ -153,7 +153,7 @@ export default function Tonight() {
             {alternates.map((o: any) => (
               <div key={o.id}>
                 <button className="row" onClick={() => setPick(options.indexOf(o))}>
-                  <DishImage name={o.dish?.name} youtubeUrl={o.dish?.youtube_url} imageUrl={o.dish?.image_url} height={58} size="sm"
+                  <DishImage name={o.dish?.name} youtubeUrl={o.dish?.youtube_url} height={58} size="sm"
                              style={{ width: 58, flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <p className="row-title">{o.dish?.name}</p>
@@ -173,7 +173,7 @@ export default function Tonight() {
 
         {/* ── The rest of the app, as one sentence ───────────────── */}
         {!loading && (lowItems.length > 0 || orders.length > 0 || activity) && (
-          <div style={{ paddingTop: 18 }}>
+          <div data-tour="news" style={{ paddingTop: 18 }}>
             <div className="rule" style={{ marginBottom: 16 }} />
             <p style={{ fontSize: 14, color: 'var(--ink-soft)', margin: 0, lineHeight: 1.65 }}>
               {lowItems.length > 0 && (
