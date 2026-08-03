@@ -210,7 +210,7 @@ export default function OrdersPage() {
         </div>
 
         {/* ── The list itself ─────────────────────────────────────── */}
-        <div style={{ paddingTop: 24 }}>
+        <div data-tour="list" style={{ paddingTop: 24 }}>
           <div className="rule" />
           {pending.map(item => (
             <div key={item.id}>

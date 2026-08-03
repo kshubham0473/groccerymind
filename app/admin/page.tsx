@@ -2,6 +2,18 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '@/components/AppProvider'
 
+/* ── patch-4 · app/admin/page.tsx ──────────────────────────────────────
+   Render-only rewrite onto the editorial paper theme (mock 4d).
+   Same endpoints as before, plus GET/POST /api/invites — which already
+   existed and was only reachable from Settings. ─────────────────────── */
+
+interface Invite { id: string; code: string; max_uses: number; uses_so_far: number; expires_at: string }
+
+function daysLeft(iso: string) {
+  const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
+  return d
+}
+
 export default function AdminPage() {
   const { user } = useApp()
   const [users, setUsers] = useState<any[]>([])
@@ -10,13 +22,16 @@ export default function AdminPage() {
   const [form, setForm] = useState({ username: '', password: '', role: 'member' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+
+  const [invites, setInvites] = useState<Invite[]>([])
+  const [minting, setMinting] = useState(false)
 
   useEffect(() => {
     fetch('/api/admin/users').then(r => r.json()).then(d => {
       if (Array.isArray(d)) setUsers(d)
       setLoading(false)
     })
+    fetch('/api/invites').then(r => r.json()).then(d => { if (Array.isArray(d)) setInvites(d) }).catch(() => {})
   }, [])
 
   async function createUser(e: React.FormEvent) {
@@ -27,118 +42,143 @@ export default function AdminPage() {
     if (data.error) { setError(data.error); setSaving(false); return }
     setUsers(p => [...p, data]); setAdding(false)
     setForm({ username: '', password: '', role: 'member' })
-    setSuccess('Member added!'); setTimeout(() => setSuccess(''), 3000)
     setSaving(false)
+  }
+
+  async function mintInvite() {
+    setMinting(true)
+    const res = await fetch('/api/invites', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invite_type: 'member' })
+    })
+    const d = await res.json()
+    if (d && d.code) setInvites(p => [d, ...p])
+    setMinting(false)
   }
 
   if (!user || user.role !== 'admin') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-        <p style={{ color: 'var(--text-muted)' }}>Admin access only</p>
+      <div className="screen" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <p className="label">Admin only</p>
       </div>
     )
   }
 
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}><span style={{ fontSize: 24 }}>⚙️</span></div>
+  const live = invites.find(i => daysLeft(i.expires_at) > 0 && i.uses_so_far < i.max_uses)
+  const cooks = users.length
 
   return (
-    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
-      <div className="page-header">
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Management</p>
-          <h1 className="font-display" style={{ color: 'white', fontSize: 24, fontWeight: 700, margin: 0 }}>Admin</h1>
-        </div>
-        <a href="/settings" style={{ position: 'absolute', top: 48, right: 20, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)', padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Settings →</a>
+    <div className="screen">
+      <div className="screen-head">
+        <span className="label">{user.username} · admin</span>
+        <a href="/settings" className="word">Settings</a>
       </div>
 
-      <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ padding: '22px 24px 0' }}>
+        <h1 className="font-display" style={{ fontSize: 'var(--t-page)', lineHeight: 1.15, fontWeight: 600, margin: 0 }}>
+          The household
+        </h1>
+        <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '8px 0 0' }}>
+          {loading ? '\u00a0' : cooks === 1 ? 'Only you, so far.' : `${cooks} people cook here.`}
+        </p>
+      </div>
 
-        {success && (
-          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--green-light)', color: 'var(--green-deep)', fontSize: 14, fontWeight: 600 }}>✓ {success}</div>
+      <div className="screen-body" style={{ paddingTop: 26 }}>
+
+        {/* Members — rows, not cards. Role printed only when notable. */}
+        <div className="rule" />
+        {loading ? (
+          [1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 48, margin: '10px 0' }} />)
+        ) : users.map(u => (
+          <div key={u.id}>
+            <div className="row" style={{ cursor: 'default' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p className="row-title">{u.display_name || u.username}</p>
+                <p className="row-meta">@{u.username}</p>
+              </div>
+              {u.role === 'admin' && <span className="status" style={{ color: 'var(--ochre)' }}>Admin</span>}
+            </div>
+            <div className="rule" />
+          </div>
+        ))}
+
+        {/* Add someone directly (password set by you) */}
+        {!adding ? (
+          <div style={{ padding: '20px 0 0' }}>
+            <button onClick={() => setAdding(true)} className="word word-ink" style={{ minHeight: 44 }}>Add someone</button>
+          </div>
+        ) : (
+          <form onSubmit={createUser} style={{ padding: '22px 0 0', display: 'flex', flexDirection: 'column', gap: 22 }}>
+            <div>
+              <label className="label" style={{ display: 'block', marginBottom: 6 }}>Username</label>
+              <input required autoFocus className="field" value={form.username}
+                onChange={e => setForm(p => ({ ...p, username: e.target.value.toLowerCase() }))} />
+            </div>
+            <div>
+              <label className="label" style={{ display: 'block', marginBottom: 6 }}>Temporary password</label>
+              <input required type="password" className="field" value={form.password}
+                onChange={e => setForm(p => ({ ...p, password: e.target.value }))} />
+            </div>
+            <div style={{ display: 'flex', gap: 20 }}>
+              {['member', 'admin'].map(r => (
+                <button type="button" key={r} onClick={() => setForm(p => ({ ...p, role: r }))}
+                  className={form.role === r ? 'word word-ink' : 'word word-quiet'} style={{ minHeight: 44 }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            {error && <p style={{ fontSize: 14, color: 'var(--finished)', margin: 0 }}>{error}</p>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="submit" disabled={saving} className="action" style={{ flex: 1 }}>
+                {saving ? 'Adding…' : 'Add to household'}
+              </button>
+              <button type="button" onClick={() => { setAdding(false); setError('') }} className="action-ghost" aria-label="Cancel">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </form>
         )}
 
-        {/* Members list */}
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>
-              Household Members · {users.length}
-            </span>
-          </div>
-          <div style={{ padding: '4px 0' }}>
-            {users.map(u => (
-              <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>@{u.username}</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', textTransform: 'capitalize' }}>{u.role}</p>
-                </div>
-                <span className={`pill ${u.role === 'admin' ? 'badge-good' : ''}`} style={{ background: u.role === 'admin' ? 'var(--green-light)' : 'var(--cream)', color: u.role === 'admin' ? 'var(--green-deep)' : 'var(--text-muted)', border: '1px solid var(--border)', fontSize: 11 }}>
-                  {u.role}
-                </span>
-              </div>
-            ))}
+        {/* The reason an admin opens this page */}
+        <div style={{ padding: '38px 0 0' }}>
+          <p className="label" style={{ margin: 0 }}>Invite code</p>
+          {live ? (
+            <>
+              <p className="font-mono" style={{ fontSize: 26, letterSpacing: '0.14em', color: 'var(--ink)', margin: '10px 0 0' }}>
+                {live.code}
+              </p>
+              <p style={{ fontSize: 14, color: 'var(--ink-soft)', margin: '10px 0 0', lineHeight: 1.6 }}>
+                Share this and they set their own password. {live.max_uses - live.uses_so_far} use
+                {live.max_uses - live.uses_so_far === 1 ? '' : 's'} left · expires in {daysLeft(live.expires_at)} days.
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: 15, color: 'var(--ink-soft)', margin: '10px 0 0', lineHeight: 1.6 }}>
+              No live code right now.
+            </p>
+          )}
+          <div style={{ paddingTop: 14 }}>
+            <button onClick={mintInvite} disabled={minting} className="word" style={{ minHeight: 44 }}>
+              {minting ? 'Making one…' : live ? 'New code' : 'Make a code'}
+            </button>
           </div>
         </div>
 
-        {/* Add member */}
-        {!adding ? (
-          <button onClick={() => setAdding(true)} style={{ width: '100%', padding: '13px', borderRadius: 12, border: '1.5px dashed var(--green-light)', background: 'none', color: 'var(--green-mid)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            + Add household member
-          </button>
-        ) : (
-          <div className="card" style={{ padding: 16 }}>
-            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>New Member</p>
-            <form onSubmit={createUser} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input required value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value.toLowerCase() }))}
-                placeholder="Username" style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
-              <input required type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                placeholder="Temporary password" style={{ padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['member','admin'].map(r => (
-                  <button type="button" key={r} onClick={() => setForm(p => ({ ...p, role: r }))} style={{
-                    flex: 1, padding: '9px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                    background: form.role === r ? 'var(--green-mid)' : 'white', color: form.role === r ? 'white' : 'var(--text-secondary)', boxShadow: 'var(--shadow)'
-                  }}>{r.charAt(0).toUpperCase() + r.slice(1)}</button>
-                ))}
-              </div>
-              {error && <p style={{ fontSize: 13, color: 'var(--red)', background: 'var(--red-light)', padding: '8px 12px', borderRadius: 8 }}>{error}</p>}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="submit" disabled={saving} style={{ flex: 1, padding: '12px', borderRadius: 12, border: 'none', background: 'var(--green-mid)', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                  {saving ? 'Creating...' : 'Create'}
-                </button>
-                <button type="button" onClick={() => { setAdding(false); setError('') }} style={{ padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)', background: 'white', fontSize: 14, cursor: 'pointer', color: 'var(--text-muted)' }}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Data management */}
-        <div className="card" style={{ padding: 16 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 12 }}>Data Management</p>
-          <a href="/onboarding" style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit'
-          }}>
-            <span style={{ fontSize: 18 }}>🔄</span>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Re-run onboarding</p>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Reset household preferences from scratch</p>
-            </div>
-            <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 18 }}>›</span>
-          </a>
-          <button onClick={async () => {
-            if (!confirm('Clear Smart Pick cache? Next visit will fetch a fresh suggestion.')) return
+        {/* Housekeeping */}
+        <div style={{ padding: '38px 0 0' }}>
+          <div className="rule" style={{ marginBottom: 16 }} />
+          <p className="label" style={{ margin: '0 0 14px' }}>Housekeeping</p>
+          <p style={{ margin: '0 0 12px' }}>
+            <a href="/onboarding" style={{ fontSize: 15, borderBottom: '1px solid var(--ink)', paddingBottom: 2 }}>Re-run onboarding</a>
+          </p>
+          <button onClick={() => {
+            if (!confirm("Forget today's suggestion? The next visit fetches a fresh one.")) return
             localStorage.removeItem('gm_suggestion')
-            alert('Cache cleared.')
           }} style={{
-            width: '100%', padding: '12px 0', display: 'flex', alignItems: 'center', gap: 10,
-            background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', marginTop: 4
+            background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 15,
+            color: 'var(--ink)', borderBottom: '1px solid var(--ink)', cursor: 'pointer', minHeight: 28,
           }}>
-            <span style={{ fontSize: 18 }}>🗑️</span>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>Clear Smart Pick cache</p>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Forces a fresh GroceryMind suggestion today</p>
-            </div>
+            Forget today&rsquo;s suggestion
           </button>
         </div>
       </div>
