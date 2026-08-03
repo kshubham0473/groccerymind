@@ -1,84 +1,107 @@
-// patch-4 · lib/tour-steps.ts
-// Re-cut to seven steps against the patch-2a / patch-3 screens.
-// Every selector below exists in those files once the data-tour
-// attributes listed in README-PATCH.md are added. Discover is no longer
-// a tab, so its two old steps are folded into step 5 on /meal-plan.
+// lib/tour-steps.ts
+// Step-by-step tour definition. Each step targets a CSS selector on a specific page.
+// The tour tells a story: "It's Monday morning. Here's how GroceryMind helps."
 
 export interface TourStep {
   id: string
   page: string                    // route to navigate to before showing step
   selector: string                // CSS selector for the element to spotlight
-  screen: string                  // printed in the sheet, mono — which screen you're on
   title: string
   body: string
-  position: 'top' | 'bottom' | 'center'
-  spotlightPadding?: number
+  position: 'top' | 'bottom' | 'center'  // tooltip position relative to spotlight
+  spotlightPadding?: number       // extra padding around spotlighted element (default 8)
 }
 
 export const TOUR_STEPS: TourStep[] = [
   {
-    id: 'tonight',
+    id: 'welcome',
     page: '/dashboard',
-    selector: '[data-tour="tonight"]',
-    screen: 'Tonight',
-    title: 'Tonight is the whole app',
-    body: 'One question answered on open: what are we eating. Everything else — the week, the pantry, the list — exists to keep this line honest.',
+    selector: '[data-tour="header"]',
+    title: "Welcome to GroceryMind 👋",
+    body: "It's Monday morning. Let's walk through how this app helps you plan meals, track your pantry, and cut down on ordering stress. Takes 2 minutes.",
     position: 'bottom',
-    spotlightPadding: 4,
+    spotlightPadding: 0,
   },
   {
-    id: 'commit',
+    id: 'todays-decision',
     page: '/dashboard',
-    selector: '[data-tour="commit"]',
-    screen: 'Tonight',
-    title: 'One dish, already chosen',
-    body: "GroceryMind picks from your rotation and what's in the kitchen. Happy with it? Cook this. Not tonight? The arrow beside it hands you another.",
+    selector: '[data-tour="todays-decision"]',
+    title: "Today's Decision",
+    body: "Every day, you decide what you're making — lunch and dinner. Once you choose, it locks in so both of you are on the same page. Tap 'Choose →' when you're ready.",
     position: 'bottom',
   },
   {
-    id: 'news',
+    id: 'dashboard-insight',
     page: '/dashboard',
-    selector: '[data-tour="news"]',
-    screen: 'Tonight',
-    title: 'The kitchen keeps its own notes',
-    body: "What's running low and what the others added shows up here as a sentence — no badge to decode, nothing to dismiss.",
+    selector: '[data-tour="insight-card"]',
+    title: "Your Cooking Insights",
+    body: "GroceryMind tracks what you cook and surfaces interesting patterns — streaks, favourites, cook rate. Gets richer the more you use it.",
+    position: 'bottom',
+  },
+  {
+    id: 'meal-plan-days',
+    page: '/meal-plan',
+    selector: '[data-tour="day-selector"]',
+    title: "Your Weekly Rotation",
+    body: "This is your meal plan — 7 days, lunch and dinner. Dishes are pre-assigned from your onboarding. Tap any day to see options and lock in a decision.",
+    position: 'bottom',
+  },
+  {
+    id: 'meal-plan-dish',
+    page: '/meal-plan',
+    selector: '[data-tour="meal-slot"]',
+    title: "Choosing a Dish",
+    body: "Each slot shows the dishes in your rotation for that day. Tap the dish name to see the YouTube recipe. Tap 'Choose →' to lock it in — your partner sees it instantly.",
     position: 'top',
   },
   {
-    id: 'week',
-    page: '/meal-plan',
-    selector: '[data-tour="week"]',
-    screen: 'Week',
-    title: 'Seven days, one line each',
-    body: 'Decided days show the dish, open days say so. Tap an open day to fill it from your rotation — today is the only line in ochre.',
+    id: 'discover-search',
+    page: '/discover',
+    selector: '[data-tour="discover-input"]',
+    title: "Discover Something New",
+    body: "Craving something specific? Describe it — 'something light with paneer' or 'quick South Indian'. GroceryMind searches your recipe library and ranks the best matches.",
     position: 'bottom',
   },
   {
-    id: 'browse',
-    page: '/meal-plan',
-    selector: '[data-tour="browse"]',
-    screen: 'Week',
-    title: 'Looking for something else',
-    body: "Browse all searches your whole library in plain words — 'something light with paneer'. Filter to what the pantry can already make, and add it straight to a day.",
-    position: 'top',
+    id: 'discover-pantry-toggle',
+    page: '/discover',
+    selector: '[data-tour="pantry-toggle"]',
+    title: "Cook from What You Have",
+    body: "Tap 'Pantry only' to filter suggestions to dishes you can make right now — no ordering needed. Great for a Tuesday night when you don't want to think too hard.",
+    position: 'bottom',
   },
   {
-    id: 'shelf',
+    id: 'pantry-shelf',
     page: '/pantry',
-    selector: '[data-tour="shelf"]',
-    screen: 'Kitchen',
-    title: 'Mark it low, it lands on the list',
-    body: 'Your kitchen by shelf life. Tap an item to say low or finished — finished walks itself over to the list.',
+    selector: '[data-tour="pantry-shelf"]',
+    title: "Your Pantry",
+    body: "Everything in your kitchen, organised by shelf life — fresh, weekly, monthly. Tap any item to mark it low or finished. Finished items go straight to your order list.",
     position: 'bottom',
   },
   {
-    id: 'list',
+    id: 'pantry-add',
+    page: '/pantry',
+    selector: '[data-tour="pantry-add"]',
+    title: "Adding Items",
+    body: "Tap here to add something new. Start typing and GroceryMind auto-detects the category — sweet corn goes under Vegetables, dahi under Dairy. You can always override it.",
+    position: 'top',
+  },
+  {
+    id: 'orders',
     page: '/orders',
-    selector: '[data-tour="list"]',
-    screen: 'List',
-    title: 'One tap to order what ran out',
-    body: 'Everything finished collects here, ready for Blinkit or Zepto. That is the loop — cook, mark, order, repeat.',
+    selector: '[data-tour="order-list"]',
+    title: "Your Order List",
+    body: "Finished pantry items and dishes from Discover flow here automatically. When you're ready to order from Blinkit or Zepto, everything is in one place.",
     position: 'bottom',
+  },
+  {
+    id: 'done',
+    page: '/dashboard',
+    selector: '[data-tour="header"]',
+    title: "You're all set ✓",
+    body: "Cook, log meals with 'Cooked ✓', and GroceryMind gets better at suggesting what you'll actually make. You can revisit this tour anytime from Settings → Help.",
+    position: 'bottom',
+    spotlightPadding: 0,
   },
 ]
 

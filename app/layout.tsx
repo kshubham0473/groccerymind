@@ -6,6 +6,7 @@ import BottomNavWrapper from '@/components/BottomNavWrapper'
 import { TourProvider } from '@/components/TourProvider'
 import TourOverlay from '@/components/TourOverlay'
 import { Analytics } from '@vercel/analytics/next'
+import PushSetup from '@/components/PushSetup'
 
 // Self-hosted + preloaded. Playfair Display and DM Sans were downloaded on
 // every cold load and never rendered — removed.
@@ -46,6 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <TourOverlay />
           </TourProvider>
         </AppProvider>
+        {/* Registers the service worker and completes notification deep links. */}
+        <PushSetup />
         <Analytics />
       </body>
     </html>
